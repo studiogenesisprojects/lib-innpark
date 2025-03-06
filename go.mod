@@ -6,7 +6,6 @@ require (
 	firebase.google.com/go/v4 v4.15.2
 	github.com/labstack/echo/v5 v5.0.0-20230722203903-ec5b858dab61
 	github.com/novuhq/go-novu v0.1.2
-	github.com/pocketbase/dbx v1.10.1
 	github.com/pocketbase/pocketbase v0.22.21
 	google.golang.org/api v0.215.0
 )
@@ -79,6 +78,7 @@ require (
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
+	github.com/pocketbase/dbx v1.10.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/spf13/cast v1.7.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect

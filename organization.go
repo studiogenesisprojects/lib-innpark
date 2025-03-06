@@ -4,8 +4,8 @@ import (
 	"github.com/pocketbase/pocketbase/tools/types"
 )
 
-func BuildOrganizationMap(id string, info types.JsonMap) map[string]interface{} {
-	return map[string]interface{}{
+func BuildOrganizationMap(id string, info types.JsonMap) map[string]any {
+	return map[string]any{
 		"id":            id,
 		"name":          info.Get("name"),
 		"cif":           info.Get("cif"),

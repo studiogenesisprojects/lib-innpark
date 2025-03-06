@@ -9,10 +9,6 @@ import (
 	"strings"
 
 	novu "github.com/novuhq/go-novu/lib"
-
-	"github.com/pocketbase/dbx"
-	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/models"
 )
 
 type CredentialsRequest struct {
@@ -40,31 +36,21 @@ const (
 )
 
 func UpdateSubscriberCredentials(
-	app core.App,
-	user *models.Record,
+	userId string,
+	tokens []string,
 ) error {
 
-	url := fmt.Sprintf("https://api.novu.co/v1/subscribers/%s/credentials", user.Id)
+	url := fmt.Sprintf("https://api.novu.co/v1/subscribers/%s/credentials", userId)
 
 	request := CredentialsRequest{
 		ProviderId:            "fcm",
 		IntegrationIdentifier: FIREBASE_CLOUD_MESSAGING,
 	}
 
-	userTokens, err := app.Dao().FindRecordsByFilter("fcm_devices", "user_id = {:user_id}", "created", 100, 0, dbx.Params{"user_id": user.Id})
-
-	if err != nil {
-		app.Logger().Error("fcm_devices_not_found", "err", err)
-		return err
-	}
-
-	for _, token := range userTokens {
-		request.Credentials.DeviceTokens = append(request.Credentials.DeviceTokens, token.GetString("token"))
-	}
+	request.Credentials.DeviceTokens = append(request.Credentials.DeviceTokens, tokens...)
 
 	j, err := json.Marshal(request)
 	if err != nil {
-		app.Logger().Error("error_marshal_json", "err", err)
 		return err
 	}
 	payload := strings.NewReader(string(j))
