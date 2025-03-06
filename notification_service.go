@@ -24,15 +24,23 @@ const (
 )
 
 const (
-	WORKFLOW_APARKPLUS_ACCEPTED                 = "aparkplus-accepted"
-	WORKFLOW_APARKPLUS_REFUSED                  = "aparkplus-refused"
-	WORKFLOW_WELCOME                            = "welcome-email"
-	WORKFLOW_STAY_REMINDER                      = "onstreet-stay-reminder"
+	WORKFLOW_APARKPLUS_ACCEPTED = "aparkplus-accepted"
+	WORKFLOW_APARKPLUS_REFUSED  = "aparkplus-refused"
+	WORKFLOW_WELCOME            = "welcome-email"
+
 	WORKFLOW_PAYMENT_ERROR                      = "payment-error"
 	WORKFLOW_PAYMENT_SUCCESS                    = "payment-success"
-	WORKFLOW_SERVICES_EMAIL                     = "services-email"
 	WORKFLOW_NEW_PAYMENT_METHOD                 = "new-payment-method-email"
 	WORKFLOW_PAYMENT_METHOD_EXPIRATION_REMINDER = "payment-method-expiration-reminder"
+	WORKFLOW_SERVICES_EMAIL                     = "services-email"
+
+	// Onstreet
+	WORKFLOW_ONSTREET_STAY_REMINDER  = "onstreet-stay-reminder"
+	WORKFLOW_ONSTREET_STAY_COMPLETED = "onstreet-stay-completed"
+
+	//Offstreet
+	OFFSTREET_STAY_AFTER_EXIT  = "offstreet-stay-after-exit"
+	OFFSTREET_STAY_AFTER_ENTER = "offstreet-stay-after-enter"
 )
 
 func UpdateSubscriberCredentials(
