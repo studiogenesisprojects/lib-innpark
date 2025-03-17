@@ -101,8 +101,11 @@ func getFirebaseUser(uid string, tentantId string) (*auth.UserRecord, error) {
 	if client, err := getClient(); err != nil {
 		return nil, err
 	} else {
-		client.TenantManager.AuthForTenant(tentantId)
-		return client.GetUser(context.Background(), uid)
+		ct, err := client.TenantManager.AuthForTenant(tentantId)
+		if err != nil {
+			return nil, err
+		}
+		return ct.GetUser(context.Background(), uid)
 	}
 }
 
