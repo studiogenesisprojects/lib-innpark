@@ -58,7 +58,7 @@ func Auth(app core.App, target string) echo.HandlerFunc {
 			}
 
 			//create user
-			collection, err := app.Dao().FindCollectionByNameOrId("users")
+			collection, err := app.Dao().FindCollectionByNameOrId(target)
 			if err != nil {
 				return err
 			}
