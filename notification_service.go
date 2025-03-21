@@ -52,7 +52,7 @@ func UpdateSubscriberCredentials(
 
 	request := CredentialsRequest{
 		ProviderId:            "fcm",
-		IntegrationIdentifier: FIREBASE_CLOUD_MESSAGING,
+		IntegrationIdentifier: os.Getenv("NOVU_FCM_ID"),
 	}
 
 	request.Credentials.DeviceTokens = append(request.Credentials.DeviceTokens, tokens...)
