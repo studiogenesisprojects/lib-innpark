@@ -20,6 +20,7 @@ type PayableMetadata struct {
 	VehicleName   string `json:"vehicle_name"`
 	StartDateTime string `json:"start_date_time"`
 	EndDateTime   string `json:"end_date_time"`
+    Code         string `json:"code"`
 }
 
 type Payable interface {
