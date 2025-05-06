@@ -21,6 +21,7 @@ type PayableMetadata struct {
 	StartDateTime string `json:"start_date_time"`
 	EndDateTime   string `json:"end_date_time"`
     Code         string `json:"code"`
+    CreatedAt   string `json:"created_at"`
 }
 
 type Payable interface {
