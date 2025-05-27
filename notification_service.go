@@ -41,6 +41,10 @@ const (
 	//Offstreet
 	OFFSTREET_STAY_AFTER_EXIT  = "offstreet-stay-after-exit"
 	OFFSTREET_STAY_AFTER_ENTER = "offstreet-stay-after-enter"
+
+	WORKFLOW_LIST_ITEM_EXPIRATION_REMINDER = "list-item-expiration-reminder"
+
+	WORKFLOW_NEW_COMPLAINT = "new-complaint"
 )
 
 func UpdateSubscriberCredentials(
