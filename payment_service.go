@@ -15,13 +15,15 @@ type PayableMetadata struct {
 	LocationType  string `json:"location_type"`
 	LocationId    string `json:"location_id"`
 	LocationName  string `json:"location_name"`
+	ClusterName   string `json:"cluster_name"`
+	ClusterId     string `json:"cluster_id"`
 	VehicleId     string `json:"vehicle_id"`
 	VehiclePlate  string `json:"vehicle_plate"`
 	VehicleName   string `json:"vehicle_name"`
 	StartDateTime string `json:"start_date_time"`
 	EndDateTime   string `json:"end_date_time"`
-    Code         string `json:"code"`
-    CreatedAt   string `json:"created_at"`
+	Code          string `json:"code"`
+	CreatedAt     string `json:"created_at"`
 }
 
 type Payable interface {
