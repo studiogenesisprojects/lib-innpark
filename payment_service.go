@@ -103,12 +103,10 @@ func CancelPreautorhization(payable Payable) error {
 	return err
 }
 
-func RefundPayment(payment Payment) error {
-	body := strings.NewReader(fmt.Sprintf(`{
-		"payment_id": "%s"
-	}`, payment.GetApiPaymentId()))
+func RefundPayment(payable Payable) error {
+	body := strings.NewReader(`{}`)
 
-	_, err := makeRequest("POST", apiUrl+"/v1/payments/refund", body)
+	_, err := makeRequest("POST", fmt.Sprintf("%s/v1/services/%s/payments/refund", apiUrl, payable.GetId()), body)
 	return err
 }
 
