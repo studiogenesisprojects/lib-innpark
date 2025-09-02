@@ -57,51 +57,65 @@ func GetPlatesInList(
 	app core.App,
 	listId string) []string {
 
-	url := fmt.Sprintf(
-		"%s/collections/list_items/records?filter=(list_id='%s')&perPage=100000&fields=value", onstreetUrl, listId) //Hardcoded perPage
-
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		app.Logger().Error("error creating request", "error", err)
-		return []string{}
-	}
-	req.Header.Set("Authorization", onstreetToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	response, err := client.Do(req)
-
-	if err != nil {
-		app.Logger().Error("error getting plates in list", "error", err)
-		return []string{}
-	}
-
-	if response.StatusCode != 200 {
-		responseBody := make([]byte, response.ContentLength)
-		response.Body.Read(responseBody)
-
-		app.Logger().Error("error getting plates in list",
-			"url", url,
-			"request", req,
-			"response", response,
-			"list_id", listId,
-			"body", string(responseBody),
-			"status", response.StatusCode)
-		return []string{}
-	}
-
-	listItemsResponse := &struct {
-		Items []Plates `json:"items"`
-	}{}
-	err = json.NewDecoder(response.Body).Decode(listItemsResponse)
-	if err != nil {
-		app.Logger().Error("error decoding response in list", "error", err)
-		return []string{}
-	}
-
 	var plates []string
-	for _, item := range listItemsResponse.Items {
-		plates = append(plates, item.Value)
+	page := 1
+	perPage := 500 // Máximo permitido por pocketbase
+
+	for {
+		url := fmt.Sprintf(
+			"%s/collections/list_items/records?filter=(list_id='%s')&page=%d&perPage=%d&fields=value", onstreetUrl, listId, page, perPage)
+
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			app.Logger().Error("error creating request", "error", err)
+			return []string{}
+		}
+		req.Header.Set("Authorization", onstreetToken)
+		req.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{}
+		response, err := client.Do(req)
+
+		if err != nil {
+			app.Logger().Error("error getting plates in list", "error", err)
+			return []string{}
+		}
+
+		if response.StatusCode != 200 {
+			responseBody := make([]byte, response.ContentLength)
+			response.Body.Read(responseBody)
+
+			app.Logger().Error("error getting plates in list",
+				"url", url,
+				"request", req,
+				"response", response,
+				"list_id", listId,
+				"body", string(responseBody),
+				"status", response.StatusCode)
+			return []string{}
+		}
+
+		listItemsResponse := &struct {
+			Items      []Plates `json:"items"`
+			Page       int      `json:"page"`
+			PerPage    int      `json:"perPage"`
+			TotalItems int      `json:"totalItems"`
+			TotalPages int      `json:"totalPages"`
+		}{}
+		err = json.NewDecoder(response.Body).Decode(listItemsResponse)
+		if err != nil {
+			app.Logger().Error("error decoding response in list", "error", err)
+			return []string{}
+		}
+
+		for _, item := range listItemsResponse.Items {
+			plates = append(plates, item.Value)
+		}
+
+		if page >= listItemsResponse.TotalPages {
+			break
+		}
+		page++
 	}
 
 	return plates
