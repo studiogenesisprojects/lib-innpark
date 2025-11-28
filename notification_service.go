@@ -115,11 +115,31 @@ func TriggerWorkflow(workflowName string, subscriberId string, payload map[strin
 	return nil
 }
 
-func GetSubscriber(userID string) (novu.SubscriberResponse, error) {
-	novuClient := novu.NewAPIClient(os.Getenv("NOVU_TOKEN"), &novu.Config{})
-	s, err := novuClient.SubscriberApi.Get(context.Background(), userID)
+type Subscriber struct {
+	ID           string `json:"_id"`
+	SubscriberID string `json:"subscriberId"`
+	Locale       string `json:"locale"`
+	Email        string `json:"email"`
+}
 
-	return s, err
+func GetSubscriber(userID string) (Subscriber, error) {
+	novuClient := novu.NewAPIClient(os.Getenv("NOVU_TOKEN"), &novu.Config{})
+	resp, err := novuClient.SubscriberApi.Get(context.Background(), userID)
+	if err != nil {
+		return Subscriber{}, err
+	}
+
+	data, ok := resp.Data.(map[string]any)
+	if !ok {
+		return Subscriber{}, fmt.Errorf("unexpected subscriber payload")
+	}
+
+	return Subscriber{
+		ID:           data["_id"].(string),
+		SubscriberID: data["subscriberId"].(string),
+		Locale:       data["locale"].(string),
+		Email:        data["email"].(string),
+	}, nil
 }
 
 func DeleteSubscriber(userID string) error {
