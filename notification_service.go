@@ -114,3 +114,16 @@ func TriggerWorkflow(workflowName string, subscriberId string, payload map[strin
 
 	return nil
 }
+
+func GetSubscriber(userID string) (novu.SubscriberResponse, error) {
+	novuClient := novu.NewAPIClient(os.Getenv("NOVU_TOKEN"), &novu.Config{})
+	s, err := novuClient.SubscriberApi.Get(context.Background(), userID)
+
+	return s, err
+}
+
+func DeleteSubscriber(userID string) error {
+	novuClient := novu.NewAPIClient(os.Getenv("NOVU_TOKEN"), &novu.Config{})
+	_, err := novuClient.SubscriberApi.Delete(context.Background(), userID)
+	return err
+}
