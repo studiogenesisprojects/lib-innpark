@@ -23,6 +23,8 @@ type PayableMetadata struct {
 	StartDateTime string `json:"start_date_time"`
 	EndDateTime   string `json:"end_date_time"`
 	Code          string `json:"code"`
+	PlanId        string `json:"plan_id"`
+	PlanName      string `json:"plan_name"`
 	CreatedAt     string `json:"created_at"`
 }
 
@@ -87,6 +89,22 @@ func CreatePayment(payable Payable, payee Payee, payment_type string) error {
 
 }
 
+func CreateRedirectPayment(payable Payable, payee Payee, returnUrlOk string, returnUrlKo string, returnUrlNotification string) (*RedirectPaymentResponse, error) {
+	body := strings.NewReader(fmt.Sprintf(`{
+		"url_ok": "%s",
+		"url_ko": "%s",
+		"url_notification": "%s",
+		"tpv_id": "%s"
+	}`, returnUrlOk, returnUrlKo, returnUrlNotification, payee.GetTpvId()))
+
+	response, err := makeRedirectRequest("POST", fmt.Sprintf("%s/v1/services/%s/redirect-payments/create", apiUrl, payable.GetId()), body)
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
 func ConfirmPreautorhization(payable Payable) error {
 
 	body := strings.NewReader(`{}`)
@@ -138,10 +156,46 @@ func makeRequest(method string, url string, body *strings.Reader) (*PaymentRespo
 	return paymentResponse, nil
 }
 
+func makeRedirectRequest(method string, url string, body *strings.Reader) (*RedirectPaymentResponse, error) {
+	req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", apiToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	response, err := client.Do(req)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if response.StatusCode != 200 {
+		return nil, fmt.Errorf("api-payment-error: %d", response.StatusCode)
+	}
+
+	paymentResponse := &RedirectPaymentResponse{}
+	err = json.NewDecoder(response.Body).Decode(paymentResponse)
+	if err != nil {
+		return nil, fmt.Errorf("api-payment-error: %s", err.Error())
+	}
+
+	return paymentResponse, nil
+}
+
 type PaymentResponse struct {
 	PaymentId string `json:"payment_id"`
 }
 
 func (p PaymentResponse) GetPaymentId() string {
 	return p.PaymentId
+}
+
+type RedirectPaymentResponse struct {
+	PaymentId            string `json:"payment_id"`
+	DsMerchantParameters string `json:"ds_merchant_parameters"`
+	DsSignatureVersion   string `json:"ds_signature_version"`
+	DsSignature          string `json:"ds_signature"`
+	RedsysUrl            string `json:"redsys_url"`
 }
