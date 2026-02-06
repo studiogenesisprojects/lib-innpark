@@ -10,6 +10,11 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 )
 
+const (
+	PAYMENT_TYPE_PAYMENT          = "payment"
+	PAYMENT_TYPE_PREAUTHORIZATION = "preauthorization"
+)
+
 type PayableMetadata struct {
 	Type          string `json:"type"`
 	LocationType  string `json:"location_type"`
@@ -87,6 +92,19 @@ func CreatePayment(payable Payable, payee Payee, payment_type string) error {
 
 	return err
 
+}
+
+func CreatePaymentByMethodId(payable Payable, payee Payee, payment_type string, paymentMethodId string) error {
+
+	body := strings.NewReader(fmt.Sprintf(`{
+		"payment_type": "%s",
+		"tpv_id": "%s",
+		"payment_method_id": "%s"
+	}`, payment_type, payee.GetTpvId(), paymentMethodId))
+
+	_, err := makeRequest("POST", fmt.Sprintf("%s/v1/services/%s/payments/create", apiUrl, payable.GetId()), body)
+
+	return err
 }
 
 func CreateRedirectPayment(payable Payable, payee Payee, returnUrlOk string, returnUrlKo string, returnUrlNotification string) (*RedirectPaymentResponse, error) {
