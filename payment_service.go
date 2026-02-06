@@ -67,6 +67,22 @@ func CreateService(payable Payable, payee Payee) error {
 	return err
 }
 
+func CreateServiceWithMetadata(app core.App, payable Payable, payee Payee) error {
+	request := map[string]interface{}{
+		"organization_id": payee.GetOrganizationId(),
+		"user_id":         payable.GetUserId(),
+		"metadata":        payable.GetMetadata(app),
+		"amount":          payable.GetAmount(),
+		"service_id":      payable.GetId(),
+	}
+	requestJson, _ := json.Marshal(request)
+	body := strings.NewReader(string(requestJson))
+
+	_, err := makeRequest("POST", apiUrl+"/v1/services/create", body)
+
+	return err
+}
+
 func UpdateService(app core.App, payable Payable, amount int) error {
 
 	request := map[string]interface{}{
