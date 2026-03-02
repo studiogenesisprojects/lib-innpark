@@ -67,6 +67,16 @@ func CreateService(payable Payable, payee Payee) error {
 	return err
 }
 
+func RefundPartialPaymentFromService(payable Payable, amount int) error {
+
+	body := strings.NewReader(fmt.Sprintf(`{
+		"amount": %d
+	}`, amount))
+
+	_, err := makeRequest("POST", fmt.Sprintf("%s/v1/services/%s/payments/refund-partial-amount", apiUrl, payable.GetId()), body)
+	return err
+}
+
 func CreateServiceWithMetadata(app core.App, payable Payable, payee Payee) error {
 	request := map[string]interface{}{
 		"organization_id": payee.GetOrganizationId(),
