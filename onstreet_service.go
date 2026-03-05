@@ -6,52 +6,12 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/apache/arrow/go/v15/arrow/array"
 	"github.com/pocketbase/pocketbase/core"
 )
 
 var onstreetUrl = os.Getenv("API_ONSTREET_URL")
 var onstreetToken = os.Getenv("API_ONSTREET_TOKEN")
-
-// func GetPlateLists_OLD(
-// 	plate string) []string {
-
-// 	url := fmt.Sprintf(
-// 		"%s/v1/lists/get-plate-lists?plate=%s", onstreetUrl, plate)
-
-// 	req, err := http.NewRequest("GET", url, nil)
-// 	if err != nil {
-// 		return []string{}
-// 	}
-// 	req.Header.Set("Authorization", onstreetToken)
-// 	req.Header.Set("Content-Type", "application/json")
-
-// 	client := &http.Client{}
-// 	response, err := client.Do(req)
-
-// 	if err != nil {
-// 		return []string{}
-// 	}
-
-// 	if response.StatusCode != 200 {
-// 		responseBody := make([]byte, response.ContentLength)
-// 		response.Body.Read(responseBody)
-// 		return []string{}
-// 	}
-
-// 	listsResponse := &[]ListItem{}
-// 	err = json.NewDecoder(response.Body).Decode(listsResponse)
-// 	if err != nil {
-// 		return []string{}
-// 	}
-
-// 	var lists []string
-// 	for _, item := range *listsResponse {
-// 		lists = append(lists, item.Id)
-// 	}
-
-// 	return lists
-
-// }
 
 func GetPlateLists(plate string, startDateTime string) []ListItem {
 	url := fmt.Sprintf(
@@ -81,6 +41,40 @@ func GetPlateLists(plate string, startDateTime string) []ListItem {
 	err = json.NewDecoder(response.Body).Decode(&lists)
 	if err != nil {
 		return []ListItem{}
+	}
+
+	return lists
+
+}
+
+func GetEnrichedPlateLists(plate string, startDateTime string) []EnrichedListItem {
+	url := fmt.Sprintf(
+		"%s/v1/lists/get-enriched-plate-lists?plate=%s&startDateTime=%s", onstreetUrl, plate, startDateTime)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return []EnrichedListItem{}
+	}
+	req.Header.Set("Authorization", onstreetToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	response, err := client.Do(req)
+
+	if err != nil {
+		return []EnrichedListItem{}
+	}
+
+	if response.StatusCode != 200 {
+		responseBody := make([]byte, response.ContentLength)
+		response.Body.Read(responseBody)
+		return []EnrichedListItem{}
+	}
+
+	lists := []EnrichedListItem{}
+	err = json.NewDecoder(response.Body).Decode(&lists)
+	if err != nil {
+		return []EnrichedListItem{}
 	}
 
 	return lists
@@ -163,6 +157,17 @@ type ListItem struct {
 	ListId   string `json:"list_id"`
 	FromDate string `json:"from_date"`
 	ToDate   string `json:"to_date"`
+}
+
+type FreeBag struct {
+	Seconds      int         `json:"seconds"`
+	Segments     int         `json:"segments"`
+	UsableInDays array.Int64 `json:"usable_in_days"`
+}
+
+type EnrichedListItem struct {
+	ListItem
+	FreeBag
 }
 
 type Plates struct {
