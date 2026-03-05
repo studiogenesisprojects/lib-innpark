@@ -11,7 +11,7 @@ import (
 var offstreetUrl = os.Getenv("API_OFFSTREET_URL")
 
 func CreateVehicle(plate string, userId string) (string, error) {
-
+	// Create vehicle
 	url := fmt.Sprintf("%s/v1/vehicles", offstreetUrl)
 
 	body := strings.NewReader(fmt.Sprintf(`{	
@@ -23,6 +23,7 @@ func CreateVehicle(plate string, userId string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
