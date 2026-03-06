@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/apache/arrow/go/v15/arrow/array"
 	"github.com/pocketbase/pocketbase/core"
 )
 
@@ -149,20 +148,43 @@ func GetPlatesInList(
 	return plates
 }
 
-// type ListItem_OLD struct {
-// 	Id string `json:"list_id"`
-// }
+func DecrementFreeBagSeconds(app core.App, listItemId string, secondsToDecrement int) {
+	url := fmt.Sprintf(
+		"%s/v1/subscriptions/decrement-free-bag-seconds?list_item_id=%s&seconds=%d", onstreetUrl, listItemId, secondsToDecrement)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		app.Logger().Error("error creating request", "error", err)
+		return
+	}
+	req.Header.Set("Authorization", onstreetToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	response, err := client.Do(req)
+
+	if err != nil {
+		app.Logger().Error("error making request", "error", err)
+		return
+	}
+
+	if response.StatusCode != 200 {
+		app.Logger().Error("unexpected status code", "status", response.StatusCode)
+		return
+	}
+}
 
 type ListItem struct {
+	Id       string `json:"id"`
 	ListId   string `json:"list_id"`
 	FromDate string `json:"from_date"`
 	ToDate   string `json:"to_date"`
 }
 
 type FreeBag struct {
-	Seconds      int         `json:"seconds"`
-	Segments     int         `json:"segments"`
-	UsableInDays array.Int64 `json:"usable_in_days"`
+	Seconds          int `json:"seconds"`
+	Segments         int `json:"segments"`
+	RemainingSeconds int `json:"remaining_seconds"`
 }
 
 type EnrichedListItem struct {
