@@ -77,7 +77,6 @@ func GetEnrichedPlateLists(plate string, startDateTime string) []EnrichedListIte
 	}
 
 	return lists
-
 }
 
 func GetPlatesInList(
@@ -174,6 +173,76 @@ func DecrementFreeBagSeconds(app core.App, listItemId string, secondsToDecrement
 	}
 }
 
+func GetAccessPassesByPlateAndParking(app core.App, plate string, parkingId string, startDateTime string) []AccessPassItem {
+	url := fmt.Sprintf(
+		"%s/v1/access-passes-items?plate=%s&parkingId=%s&startDateTime=%s", onstreetUrl, plate, parkingId, startDateTime)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		app.Logger().Error("error creating request", "error", err)
+		return []AccessPassItem{}
+	}
+	req.Header.Set("Authorization", onstreetToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	response, err := client.Do(req)
+
+	if err != nil {
+		app.Logger().Error("error making request", "error", err)
+		return []AccessPassItem{}
+	}
+
+	if response.StatusCode != 200 {
+		app.Logger().Error("unexpected status code", "status", response.StatusCode)
+		return []AccessPassItem{}
+	}
+
+	var accessPasses []AccessPassItem
+	err = json.NewDecoder(response.Body).Decode(&accessPasses)
+	if err != nil {
+		app.Logger().Error("error decoding response", "error", err)
+		return []AccessPassItem{}
+	}
+
+	return accessPasses
+}
+
+func ActivateAccessPass(app core.App, accessPasssItemId string, startDateTime string) (AccessPassItem, error) {
+	url := fmt.Sprintf(
+		"%s/v1/access-passes-items/activate?accessPassItemId=%s&startDateTime=%s", onstreetUrl, accessPasssItemId, startDateTime)
+
+	req, err := http.NewRequest("POST", url, nil)
+	if err != nil {
+		app.Logger().Error("error creating request", "error", err)
+		return AccessPassItem{}, err
+	}
+	req.Header.Set("Authorization", onstreetToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	response, err := client.Do(req)
+
+	if err != nil {
+		app.Logger().Error("error making request", "error", err)
+		return AccessPassItem{}, err
+	}
+
+	if response.StatusCode != 200 {
+		app.Logger().Error("unexpected status code", "status", response.StatusCode)
+		return AccessPassItem{}, fmt.Errorf("unexpected status code: %d", response.StatusCode)
+	}
+
+	var accessPass AccessPassItem
+	err = json.NewDecoder(response.Body).Decode(&accessPass)
+	if err != nil {
+		app.Logger().Error("error decoding response", "error", err)
+		return AccessPassItem{}, err
+	}
+
+	return accessPass, nil
+}
+
 type ListItem struct {
 	Id       string `json:"id"`
 	ListId   string `json:"list_id"`
@@ -185,6 +254,15 @@ type FreeBag struct {
 	Seconds          int `json:"seconds"`
 	Segments         int `json:"segments"`
 	RemainingSeconds int `json:"remaining_seconds"`
+}
+
+type AccessPassItem struct {
+	Id               string `json:"id"`
+	AccessPassPlanId string `db:"access_pass_plan_id" json:"access_pass_plan_id"`
+	AccessPassPackId string `db:"access_pass_pack_id" json:"access_pass_pack_id"`
+	Metadata         string `db:"metadata" json:"metadata"`
+	FromDate         string `json:"from_date"`
+	ToDate           string `json:"to_date"`
 }
 
 type EnrichedListItem struct {
