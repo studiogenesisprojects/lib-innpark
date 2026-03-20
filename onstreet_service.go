@@ -12,6 +12,9 @@ import (
 var onstreetUrl = os.Getenv("API_ONSTREET_URL")
 var onstreetToken = os.Getenv("API_ONSTREET_TOKEN")
 
+var VEHICLE_TYPE_CAR = "CAR"
+var VEHICLE_TYPE_MOTORBIKE = "MOTORBIKE"
+
 func GetPlateLists(plate string, startDateTime string) []ListItem {
 	url := fmt.Sprintf(
 		"%s/v1/lists/get-plate-lists?plate=%s&startDateTime=%s", onstreetUrl, plate, startDateTime)
