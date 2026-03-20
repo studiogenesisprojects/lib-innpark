@@ -49,9 +49,9 @@ func GetPlateLists(plate string, startDateTime string) []ListItem {
 
 }
 
-func GetEnrichedPlateLists(plate string, startDateTime string) []EnrichedListItem {
+func GetEnrichedPlateLists(plate string, startDateTime string, vehicleType string) []EnrichedListItem {
 	url := fmt.Sprintf(
-		"%s/v1/lists/get-enriched-plate-lists?plate=%s&startDateTime=%s", onstreetUrl, plate, startDateTime)
+		"%s/v1/lists/get-enriched-plate-lists?plate=%s&startDateTime=%s&vehicleType=%s", onstreetUrl, plate, startDateTime, vehicleType)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
