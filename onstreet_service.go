@@ -49,9 +49,9 @@ func GetPlateLists(plate string, startDateTime string) []ListItem {
 
 }
 
-func GetEnrichedPlateLists(plate string, startDateTime string, vehicleType string) []EnrichedListItem {
+func GetEnrichedPlateLists(plate string, startDateTime string) []EnrichedListItem {
 	url := fmt.Sprintf(
-		"%s/v1/lists/get-enriched-plate-lists?plate=%s&startDateTime=%s&vehicleType=%s", onstreetUrl, plate, startDateTime, vehicleType)
+		"%s/v1/lists/get-enriched-plate-lists?plate=%s&startDateTime=%s", onstreetUrl, plate, startDateTime)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -176,9 +176,44 @@ func DecrementFreeBagSeconds(app core.App, listItemId string, secondsToDecrement
 	}
 }
 
-func GetAccessPassesByPlateAndParking(app core.App, plate string, parkingId string, startDateTime string) []AccessPassItem {
+func GetActiveAccessPassesByPlateAndParkingAndDateTime(app core.App, plate string, parkingId string, startDateTime string) AccessPassItem {
 	url := fmt.Sprintf(
-		"%s/v1/access-passes-items?plate=%s&parkingId=%s&startDateTime=%s", onstreetUrl, plate, parkingId, startDateTime)
+		"%s/v1/active-access-passes-items?plate=%s&parkingId=%s&startDateTime=%s", onstreetUrl, plate, parkingId, startDateTime)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		app.Logger().Error("error creating request", "error", err)
+		return AccessPassItem{}
+	}
+	req.Header.Set("Authorization", onstreetToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	response, err := client.Do(req)
+
+	if err != nil {
+		app.Logger().Error("error making request", "error", err)
+		return AccessPassItem{}
+	}
+
+	if response.StatusCode != 200 {
+		app.Logger().Error("unexpected status code", "status", response.StatusCode)
+		return AccessPassItem{}
+	}
+
+	var accessPass AccessPassItem
+	err = json.NewDecoder(response.Body).Decode(&accessPass)
+	if err != nil {
+		app.Logger().Error("error decoding response", "error", err)
+		return AccessPassItem{}
+	}
+
+	return accessPass
+}
+
+func GetUnusedAccessPassesByPlateAndParking(app core.App, plate string, parkingId string) []AccessPassItem {
+	url := fmt.Sprintf(
+		"%s/v1/unused-access-passes-items?plate=%s&parkingId=%s", onstreetUrl, plate, parkingId)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
