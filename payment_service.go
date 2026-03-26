@@ -229,11 +229,15 @@ func makeRedirectRequest(method string, url string, body *strings.Reader) (*Redi
 }
 
 type PaymentResponse struct {
-	PaymentId string `json:"payment_id"`
+	Payable PayableResponse `json:"Payable"`
+}
+type PayableResponse struct {
+	Id            string `json:"id"`
+	LastPaymentId string `json:"last_payment_id"`
 }
 
 func (p PaymentResponse) GetPaymentId() string {
-	return p.PaymentId
+	return p.Payable.LastPaymentId
 }
 
 type RedirectPaymentResponse struct {
