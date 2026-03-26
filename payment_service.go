@@ -107,20 +107,20 @@ func UpdateService(app core.App, payable Payable, amount int) error {
 	return err
 }
 
-func CreatePayment(payable Payable, payee Payee, payment_type string) error {
+func CreatePayment(payable Payable, payee Payee, payment_type string) (*PaymentResponse, error) {
 
 	body := strings.NewReader(fmt.Sprintf(`{
 		"payment_type": "%s",
 		"tpv_id": "%s"
 	}`, payment_type, payee.GetTpvId()))
 
-	_, err := makeRequest("POST", fmt.Sprintf("%s/v1/services/%s/payments/create", apiUrl, payable.GetId()), body)
+	r, err := makeRequest("POST", fmt.Sprintf("%s/v1/services/%s/payments/create", apiUrl, payable.GetId()), body)
 
-	return err
+	return r, err
 
 }
 
-func CreatePaymentByMethodId(payable Payable, payee Payee, payment_type string, paymentMethodId string) error {
+func CreatePaymentByMethodId(payable Payable, payee Payee, payment_type string, paymentMethodId string) (*PaymentResponse, error) {
 
 	body := strings.NewReader(fmt.Sprintf(`{
 		"payment_type": "%s",
@@ -128,9 +128,9 @@ func CreatePaymentByMethodId(payable Payable, payee Payee, payment_type string, 
 		"payment_method_id": "%s"
 	}`, payment_type, payee.GetTpvId(), paymentMethodId))
 
-	_, err := makeRequest("POST", fmt.Sprintf("%s/v1/services/%s/payments/create", apiUrl, payable.GetId()), body)
+	r, err := makeRequest("POST", fmt.Sprintf("%s/v1/services/%s/payments/create", apiUrl, payable.GetId()), body)
 
-	return err
+	return r, err
 }
 
 func CreateRedirectPayment(payable Payable, payee Payee, returnUrlOk string, returnUrlKo string, returnUrlNotification string) (*RedirectPaymentResponse, error) {
