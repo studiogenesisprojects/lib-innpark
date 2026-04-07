@@ -20,5 +20,6 @@ func BuildOrganizationMap(id string, info types.JsonMap) map[string]any {
 		"logo":          info.Get("logo"),
 		"website":       info.Get("website"),
 		"primary_color": info.Get("primary_color"),
+		"user_website": info.Get("user_website"),
 	}
 }
