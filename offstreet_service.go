@@ -10,14 +10,15 @@ import (
 
 var offstreetUrl = os.Getenv("API_OFFSTREET_URL")
 
-func CreateVehicle(plate string, userId string) (string, error) {
+func CreateVehicle(plate string, vehicleId string, userId string) (string, error) {
 	// Create vehicle
 	url := fmt.Sprintf("%s/v1/vehicles/create", offstreetUrl)
 
 	body := strings.NewReader(fmt.Sprintf(`{	
 		"plate": "%s",
+		"vehicle_id": "%s",
 		"user_id": "%s"
-	}`, plate, userId))
+	}`, plate, vehicleId, userId))
 
 	req, err := http.NewRequest("POST", url, body)
 	if err != nil {
