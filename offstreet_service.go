@@ -77,6 +77,51 @@ func DeleteVehicle(plate string, userId string) error {
 	return nil
 }
 
+func GetParkings(organizationId string, clusterId string) []Parking {
+	url := fmt.Sprintf("%s/collections/parkings/records", offstreetUrl)
+
+	var filters []string
+	if organizationId != "" {
+		filters = append(filters, fmt.Sprintf("organization_id='%s'", organizationId))
+	}
+	if clusterId != "" {
+		filters = append(filters, fmt.Sprintf("cluster_id='%s'", clusterId))
+	}
+	if len(filters) > 0 {
+		url += fmt.Sprintf("?filter=(%s)", strings.Join(filters, " && "))
+	}
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return []Parking{}
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	response, err := client.Do(req)
+
+	if err != nil {
+		return []Parking{}
+	}
+
+	if response.StatusCode != 200 {
+		return []Parking{}
+	}
+
+	var parkingsResponse ParkingResponse
+	err = json.NewDecoder(response.Body).Decode(&parkingsResponse)
+	if err != nil {
+		return []Parking{}
+	}
+
+	return parkingsResponse.Items
+}
+
+type ParkingResponse struct {
+	Items []Parking `json:"items"`
+}
+
 type VehicleResponse struct {
 	Id     string `json:"id"`
 	UserId string `json:"user_id"`
@@ -85,4 +130,10 @@ type VehicleResponse struct {
 
 type CreateVehicleResponse struct {
 	Id string `json:"id"`
+}
+type Parking struct {
+	Id             string `json:"id"`
+	OrganizationId string `json:"organization_id"`
+	ClusterId      string `json:"cluster_id"`
+	Name           string `json:"name"`
 }
