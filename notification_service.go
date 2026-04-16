@@ -135,7 +135,7 @@ func TriggerWorkflowForOrganization(workflowName string, userId string, organiza
 		return err
 	}
 
-	req, err := http.NewRequest("POST", os.Getenv("API_PAYMENT")+"/api/v1/notifications/trigger-for-organization", strings.NewReader(string(j)))
+	req, err := http.NewRequest("POST", os.Getenv("API_PAYMENT")+"/v1/notifications/trigger-for-organization", strings.NewReader(string(j)))
 	if err != nil {
 		return err
 	}
