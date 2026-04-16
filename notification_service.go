@@ -115,6 +115,46 @@ func TriggerWorkflow(workflowName string, subscriberId string, payload map[strin
 	return nil
 }
 
+// TriggerWorkflowForOrganization triggers a workflow via the payment API,
+// which will restrict FCM delivery to tokens registered under the given organization.
+func TriggerWorkflowForOrganization(workflowName string, userId string, organizationId string, payload map[string]interface{}) error {
+	body := struct {
+		WorkflowName   string                 `json:"workflow_name"`
+		UserId         string                 `json:"user_id"`
+		OrganizationId string                 `json:"organization_id"`
+		Payload        map[string]interface{} `json:"payload"`
+	}{
+		WorkflowName:   workflowName,
+		UserId:         userId,
+		OrganizationId: organizationId,
+		Payload:        payload,
+	}
+
+	j, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest("POST", os.Getenv("API_PAYMENT")+"/api/v1/notifications/trigger-for-organization", strings.NewReader(string(j)))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", os.Getenv("API_PAYMENT_TOKEN"))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("trigger-for-organization failed: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
 type Subscriber struct {
 	ID           string `json:"_id"`
 	SubscriberID string `json:"subscriberId"`
