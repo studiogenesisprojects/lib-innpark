@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -51,8 +53,12 @@ func UpdateSubscriberCredentials(
 	userId string,
 	tokens []string,
 ) error {
+	baseURL, err := novuAPIBaseURL()
+	if err != nil {
+		return err
+	}
 
-	url := fmt.Sprintf("https://api.novu.co/v1/subscribers/%s/credentials", userId)
+	endpoint := fmt.Sprintf("%s/v1/subscribers/%s/credentials", baseURL.String(), url.PathEscape(userId))
 
 	request := CredentialsRequest{
 		ProviderId:            "fcm",
@@ -67,27 +73,58 @@ func UpdateSubscriberCredentials(
 	}
 	payload := strings.NewReader(string(j))
 
-	req, _ := http.NewRequest("PUT", url, payload)
+	req, err := http.NewRequest("PUT", endpoint, payload)
+	if err != nil {
+		return err
+	}
 
 	req.Header.Add("Authorization", "ApiKey "+os.Getenv("NOVU_TOKEN"))
 	req.Header.Add("Content-Type", "application/json")
 
-	res, _ := http.DefaultClient.Do(req)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
-		errorBody := make([]byte, res.ContentLength)
-		res.Body.Read(errorBody)
+		errorBody, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
 		return fmt.Errorf("error updating subscriber credentials: %s", string(errorBody))
 	}
-
-	defer res.Body.Close()
 
 	return nil
 }
 
+func novuAPIBaseURL() (*url.URL, error) {
+	rawURL := strings.TrimSpace(os.Getenv("NOVU_API_URL"))
+	if rawURL == "" {
+		rawURL = "https://api.novu.co"
+	}
+
+	parsedURL, err := url.Parse(strings.TrimRight(rawURL, "/"))
+	if err != nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
+		return nil, fmt.Errorf("invalid NOVU_API_URL")
+	}
+	parsedURL.Path = strings.TrimSuffix(strings.TrimRight(parsedURL.Path, "/"), "/v1")
+	parsedURL.RawQuery = ""
+	parsedURL.Fragment = ""
+	return parsedURL, nil
+}
+
+func NewNovuClient() (*novu.APIClient, error) {
+	baseURL, err := novuAPIBaseURL()
+	if err != nil {
+		return nil, err
+	}
+	return novu.NewAPIClient(os.Getenv("NOVU_TOKEN"), &novu.Config{BackendURL: baseURL}), nil
+}
+
 func CreateSubscriber(userID string, email string) error {
-	novuClient := novu.NewAPIClient(os.Getenv("NOVU_TOKEN"), &novu.Config{})
-	_, err := novuClient.SubscriberApi.Identify(context.Background(), userID, map[string]interface{}{
+	novuClient, err := NewNovuClient()
+	if err != nil {
+		return err
+	}
+	_, err = novuClient.SubscriberApi.Identify(context.Background(), userID, map[string]interface{}{
 		"subscriberId": userID,
 		"email":        email,
 		"locale":       "ca",
@@ -98,7 +135,10 @@ func CreateSubscriber(userID string, email string) error {
 
 func TriggerWorkflow(workflowName string, subscriberId string, payload map[string]interface{}) error {
 	ctx := context.Background()
-	novuClient := novu.NewAPIClient(os.Getenv("NOVU_TOKEN"), &novu.Config{})
+	novuClient, err := NewNovuClient()
+	if err != nil {
+		return err
+	}
 
 	payloadOptions := novu.ITriggerPayloadOptions{
 		To: map[string]interface{}{
@@ -106,7 +146,7 @@ func TriggerWorkflow(workflowName string, subscriberId string, payload map[strin
 		},
 		Payload: payload,
 	}
-	_, err := novuClient.EventApi.Trigger(ctx, workflowName, payloadOptions)
+	_, err = novuClient.EventApi.Trigger(ctx, workflowName, payloadOptions)
 
 	if err != nil {
 		return err
@@ -163,7 +203,10 @@ type Subscriber struct {
 }
 
 func GetSubscriber(userID string) (Subscriber, error) {
-	novuClient := novu.NewAPIClient(os.Getenv("NOVU_TOKEN"), &novu.Config{})
+	novuClient, err := NewNovuClient()
+	if err != nil {
+		return Subscriber{}, err
+	}
 	resp, err := novuClient.SubscriberApi.Get(context.Background(), userID)
 	if err != nil {
 		return Subscriber{}, err
@@ -183,7 +226,10 @@ func GetSubscriber(userID string) (Subscriber, error) {
 }
 
 func DeleteSubscriber(userID string) error {
-	novuClient := novu.NewAPIClient(os.Getenv("NOVU_TOKEN"), &novu.Config{})
-	_, err := novuClient.SubscriberApi.Delete(context.Background(), userID)
+	novuClient, err := NewNovuClient()
+	if err != nil {
+		return err
+	}
+	_, err = novuClient.SubscriberApi.Delete(context.Background(), userID)
 	return err
 }
