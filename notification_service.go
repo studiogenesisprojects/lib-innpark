@@ -54,6 +54,14 @@ func UpdateSubscriberCredentials(
 	userId string,
 	tokens []string,
 ) error {
+	return UpdateSubscriberCredentialsContext(context.Background(), userId, tokens)
+}
+
+func UpdateSubscriberCredentialsContext(
+	ctx context.Context,
+	userId string,
+	tokens []string,
+) error {
 	baseURL, err := novuAPIBaseURL()
 	if err != nil {
 		return err
@@ -74,7 +82,7 @@ func UpdateSubscriberCredentials(
 	}
 	payload := strings.NewReader(string(j))
 
-	req, err := http.NewRequest("PUT", endpoint, payload)
+	req, err := http.NewRequestWithContext(ctx, "PUT", endpoint, payload)
 	if err != nil {
 		return err
 	}
@@ -121,21 +129,28 @@ func NewNovuClient() (*novu.APIClient, error) {
 }
 
 func CreateSubscriber(userID string, email string) error {
+	return UpsertSubscriber(context.Background(), userID, email, DEFAULT_SUBSCRIBER_LOCALE)
+}
+
+func UpsertSubscriber(ctx context.Context, userID string, email string, locale string) error {
 	novuClient, err := NewNovuClient()
 	if err != nil {
 		return err
 	}
-	_, err = novuClient.SubscriberApi.Identify(context.Background(), userID, map[string]interface{}{
+	_, err = novuClient.SubscriberApi.Identify(ctx, userID, map[string]interface{}{
 		"subscriberId": userID,
 		"email":        email,
-		"locale":       DEFAULT_SUBSCRIBER_LOCALE,
+		"locale":       locale,
 	})
 
 	return err
 }
 
 func TriggerWorkflow(workflowName string, subscriberId string, payload map[string]interface{}) error {
-	ctx := context.Background()
+	return TriggerWorkflowWithTransactionID(context.Background(), workflowName, subscriberId, payload, "")
+}
+
+func TriggerWorkflowWithTransactionID(ctx context.Context, workflowName string, subscriberId string, payload map[string]interface{}, transactionID string) error {
 	novuClient, err := NewNovuClient()
 	if err != nil {
 		return err
@@ -145,7 +160,8 @@ func TriggerWorkflow(workflowName string, subscriberId string, payload map[strin
 		To: map[string]interface{}{
 			"subscriberId": subscriberId,
 		},
-		Payload: payload,
+		Payload:       payload,
+		TransactionId: transactionID,
 	}
 	_, err = novuClient.EventApi.Trigger(ctx, workflowName, payloadOptions)
 

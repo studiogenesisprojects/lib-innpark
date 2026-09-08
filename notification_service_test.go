@@ -72,3 +72,50 @@ func TestCreateSubscriberDefaultsLocaleToSpanish(t *testing.T) {
 		t.Errorf("locale = %q, want %q", got, want)
 	}
 }
+
+func TestUpsertSubscriberUsesProvidedLocale(t *testing.T) {
+	var requestBody map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Errorf("decode request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{}}`))
+	}))
+	defer server.Close()
+
+	t.Setenv("NOVU_API_URL", server.URL)
+	t.Setenv("NOVU_TOKEN", "test-token")
+
+	if err := UpsertSubscriber(t.Context(), "user-123", "user@example.com", "gl"); err != nil {
+		t.Fatalf("UpsertSubscriber returned an error: %v", err)
+	}
+	if got, want := requestBody["locale"], "gl"; got != want {
+		t.Errorf("locale = %q, want %q", got, want)
+	}
+}
+
+func TestTriggerWorkflowWithTransactionID(t *testing.T) {
+	var requestBody map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got, want := r.URL.Path, "/v1/events/trigger"; got != want {
+			t.Errorf("path = %q, want %q", got, want)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Errorf("decode request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{}}`))
+	}))
+	defer server.Close()
+
+	t.Setenv("NOVU_API_URL", server.URL)
+	t.Setenv("NOVU_TOKEN", "test-token")
+
+	if err := TriggerWorkflowWithTransactionID(t.Context(), WORKFLOW_WELCOME, "user-123", map[string]interface{}{"app_name": "Innpark"}, "welcome-123"); err != nil {
+		t.Fatalf("TriggerWorkflowWithTransactionID returned an error: %v", err)
+	}
+	if got, want := requestBody["transactionId"], "welcome-123"; got != want {
+		t.Errorf("transactionId = %q, want %q", got, want)
+	}
+}
