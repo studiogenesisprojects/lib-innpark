@@ -1,6 +1,7 @@
 package innpark
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -87,7 +88,7 @@ func TestUpsertSubscriberUsesProvidedLocale(t *testing.T) {
 	t.Setenv("NOVU_API_URL", server.URL)
 	t.Setenv("NOVU_TOKEN", "test-token")
 
-	if err := UpsertSubscriber(t.Context(), "user-123", "user@example.com", "gl"); err != nil {
+	if err := UpsertSubscriber(context.Background(), "user-123", "user@example.com", "gl"); err != nil {
 		t.Fatalf("UpsertSubscriber returned an error: %v", err)
 	}
 	if got, want := requestBody["locale"], "gl"; got != want {
@@ -112,7 +113,7 @@ func TestTriggerWorkflowWithTransactionID(t *testing.T) {
 	t.Setenv("NOVU_API_URL", server.URL)
 	t.Setenv("NOVU_TOKEN", "test-token")
 
-	if err := TriggerWorkflowWithTransactionID(t.Context(), WORKFLOW_WELCOME, "user-123", map[string]interface{}{"app_name": "Innpark"}, "welcome-123"); err != nil {
+	if err := TriggerWorkflowWithTransactionID(context.Background(), WORKFLOW_WELCOME, "user-123", map[string]interface{}{"app_name": "Innpark"}, "welcome-123"); err != nil {
 		t.Fatalf("TriggerWorkflowWithTransactionID returned an error: %v", err)
 	}
 	if got, want := requestBody["transactionId"], "welcome-123"; got != want {
