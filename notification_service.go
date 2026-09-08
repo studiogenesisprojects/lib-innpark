@@ -22,7 +22,8 @@ type CredentialsRequest struct {
 }
 
 const (
-	FIREBASE_CLOUD_MESSAGING = "firebase-cloud-messaging-PZsqbhqPe"
+	FIREBASE_CLOUD_MESSAGING  = "firebase-cloud-messaging-PZsqbhqPe"
+	DEFAULT_SUBSCRIBER_LOCALE = "es"
 )
 
 const (
@@ -127,7 +128,7 @@ func CreateSubscriber(userID string, email string) error {
 	_, err = novuClient.SubscriberApi.Identify(context.Background(), userID, map[string]interface{}{
 		"subscriberId": userID,
 		"email":        email,
-		"locale":       "ca",
+		"locale":       DEFAULT_SUBSCRIBER_LOCALE,
 	})
 
 	return err
