@@ -68,13 +68,19 @@ func CreateService(payable Payable, payee Payee) error {
 }
 
 func RefundPartialPaymentFromService(payable Payable, amount int) error {
+	_, err := RefundPartialPaymentFromServiceWithIdempotencyKey(payable, amount, "")
+	return err
+}
+
+// RefundPartialPaymentFromServiceWithIdempotencyKey refunds part of a service and
+// returns the Payment API result. The key is forwarded unchanged when provided.
+func RefundPartialPaymentFromServiceWithIdempotencyKey(payable Payable, amount int, idempotencyKey string) (*PaymentResponse, error) {
 
 	body := strings.NewReader(fmt.Sprintf(`{
 		"amount": %d
 	}`, amount))
 
-	_, err := makeRequest("POST", fmt.Sprintf("%s/v1/services/%s/payments/refund-partial-amount", apiUrl, payable.GetId()), body)
-	return err
+	return makeRequestWithIdempotencyKey("POST", fmt.Sprintf("%s/v1/services/%s/payments/refund-partial-amount", apiUrl, payable.GetId()), body, idempotencyKey)
 }
 
 func CreateServiceWithMetadata(app core.App, payable Payable, payee Payee) error {
@@ -108,32 +114,50 @@ func UpdateService(app core.App, payable Payable, amount int) error {
 }
 
 func CreatePayment(payable Payable, payee Payee, payment_type string) (*PaymentResponse, error) {
+	return CreatePaymentWithIdempotencyKey(payable, payee, payment_type, "")
+}
+
+// CreatePaymentWithIdempotencyKey creates a payment and forwards the optional
+// idempotency key to Payment API.
+func CreatePaymentWithIdempotencyKey(payable Payable, payee Payee, paymentType string, idempotencyKey string) (*PaymentResponse, error) {
 
 	body := strings.NewReader(fmt.Sprintf(`{
 		"payment_type": "%s",
 		"tpv_id": "%s"
-	}`, payment_type, payee.GetTpvId()))
+	}`, paymentType, payee.GetTpvId()))
 
-	r, err := makeRequest("POST", fmt.Sprintf("%s/v1/services/%s/payments/create", apiUrl, payable.GetId()), body)
+	r, err := makeRequestWithIdempotencyKey("POST", fmt.Sprintf("%s/v1/services/%s/payments/create", apiUrl, payable.GetId()), body, idempotencyKey)
 
 	return r, err
 
 }
 
 func CreatePaymentByMethodId(payable Payable, payee Payee, payment_type string, paymentMethodId string) (*PaymentResponse, error) {
+	return CreatePaymentByMethodIdWithIdempotencyKey(payable, payee, payment_type, paymentMethodId, "")
+}
+
+// CreatePaymentByMethodIdWithIdempotencyKey creates a payment with an explicit
+// payment method and forwards the optional idempotency key.
+func CreatePaymentByMethodIdWithIdempotencyKey(payable Payable, payee Payee, paymentType string, paymentMethodId string, idempotencyKey string) (*PaymentResponse, error) {
 
 	body := strings.NewReader(fmt.Sprintf(`{
 		"payment_type": "%s",
 		"tpv_id": "%s",
 		"payment_method_id": "%s"
-	}`, payment_type, payee.GetTpvId(), paymentMethodId))
+	}`, paymentType, payee.GetTpvId(), paymentMethodId))
 
-	r, err := makeRequest("POST", fmt.Sprintf("%s/v1/services/%s/payments/create", apiUrl, payable.GetId()), body)
+	r, err := makeRequestWithIdempotencyKey("POST", fmt.Sprintf("%s/v1/services/%s/payments/create", apiUrl, payable.GetId()), body, idempotencyKey)
 
 	return r, err
 }
 
 func CreateRedirectPayment(payable Payable, payee Payee, returnUrlOk string, returnUrlKo string, returnUrlNotification string) (*RedirectPaymentResponse, error) {
+	return CreateRedirectPaymentWithIdempotencyKey(payable, payee, returnUrlOk, returnUrlKo, returnUrlNotification, "")
+}
+
+// CreateRedirectPaymentWithIdempotencyKey creates a redirect payment and
+// forwards the optional idempotency key.
+func CreateRedirectPaymentWithIdempotencyKey(payable Payable, payee Payee, returnUrlOk string, returnUrlKo string, returnUrlNotification string, idempotencyKey string) (*RedirectPaymentResponse, error) {
 	body := strings.NewReader(fmt.Sprintf(`{
 		"url_ok": "%s",
 		"url_ko": "%s",
@@ -141,7 +165,7 @@ func CreateRedirectPayment(payable Payable, payee Payee, returnUrlOk string, ret
 		"tpv_id": "%s"
 	}`, returnUrlOk, returnUrlKo, returnUrlNotification, payee.GetTpvId()))
 
-	response, err := makeRedirectRequest("POST", fmt.Sprintf("%s/v1/services/%s/redirect-payments/create", apiUrl, payable.GetId()), body)
+	response, err := makeRedirectRequestWithIdempotencyKey("POST", fmt.Sprintf("%s/v1/services/%s/redirect-payments/create", apiUrl, payable.GetId()), body, idempotencyKey)
 	if err != nil {
 		return nil, err
 	}
@@ -150,35 +174,60 @@ func CreateRedirectPayment(payable Payable, payee Payee, returnUrlOk string, ret
 }
 
 func ConfirmPreautorhization(payable Payable) error {
+	_, err := ConfirmPreauthorizationWithIdempotencyKey(payable, "")
+	return err
+}
+
+// ConfirmPreauthorizationWithIdempotencyKey confirms a preauthorization and
+// returns the Payment API result, including an optional cashback completion.
+func ConfirmPreauthorizationWithIdempotencyKey(payable Payable, idempotencyKey string) (*PaymentResponse, error) {
 
 	body := strings.NewReader(`{}`)
 
-	_, err := makeRequest("POST", fmt.Sprintf("%s/v1/services/%s/payments/confirm", apiUrl, payable.GetId()), body)
-	return err
+	return makeRequestWithIdempotencyKey("POST", fmt.Sprintf("%s/v1/services/%s/payments/confirm", apiUrl, payable.GetId()), body, idempotencyKey)
 }
 
 func CancelPreautorhization(payable Payable) error {
+	_, err := CancelPreauthorizationWithIdempotencyKey(payable, "")
+	return err
+}
+
+// CancelPreauthorizationWithIdempotencyKey cancels a preauthorization and
+// returns the Payment API result.
+func CancelPreauthorizationWithIdempotencyKey(payable Payable, idempotencyKey string) (*PaymentResponse, error) {
 
 	body := strings.NewReader(`{}`)
 
-	_, err := makeRequest("POST", fmt.Sprintf("%s/v1/services/%s/payments/cancel", apiUrl, payable.GetId()), body)
-	return err
+	return makeRequestWithIdempotencyKey("POST", fmt.Sprintf("%s/v1/services/%s/payments/cancel", apiUrl, payable.GetId()), body, idempotencyKey)
 }
 
 func RefundPayment(payable Payable) error {
-	body := strings.NewReader(`{}`)
-
-	_, err := makeRequest("POST", fmt.Sprintf("%s/v1/services/%s/payments/refund", apiUrl, payable.GetId()), body)
+	_, err := RefundPaymentWithIdempotencyKey(payable, "")
 	return err
 }
 
+// RefundPaymentWithIdempotencyKey refunds a service and returns the Payment API
+// result, including cashback reversal fields when present.
+func RefundPaymentWithIdempotencyKey(payable Payable, idempotencyKey string) (*PaymentResponse, error) {
+	body := strings.NewReader(`{}`)
+
+	return makeRequestWithIdempotencyKey("POST", fmt.Sprintf("%s/v1/services/%s/payments/refund", apiUrl, payable.GetId()), body, idempotencyKey)
+}
+
 func makeRequest(method string, url string, body *strings.Reader) (*PaymentResponse, error) {
+	return makeRequestWithIdempotencyKey(method, url, body, "")
+}
+
+func makeRequestWithIdempotencyKey(method string, url string, body *strings.Reader, idempotencyKey string) (*PaymentResponse, error) {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Authorization", apiToken)
 	req.Header.Set("Content-Type", "application/json")
+	if idempotencyKey != "" {
+		req.Header.Set("Idempotency-Key", idempotencyKey)
+	}
 
 	client := &http.Client{}
 	response, err := client.Do(req)
@@ -186,6 +235,7 @@ func makeRequest(method string, url string, body *strings.Reader) (*PaymentRespo
 	if err != nil {
 		return nil, err
 	}
+	defer response.Body.Close()
 
 	if response.StatusCode != 200 {
 		return nil, fmt.Errorf("api-payment-error: %d", response.StatusCode)
@@ -201,12 +251,19 @@ func makeRequest(method string, url string, body *strings.Reader) (*PaymentRespo
 }
 
 func makeRedirectRequest(method string, url string, body *strings.Reader) (*RedirectPaymentResponse, error) {
+	return makeRedirectRequestWithIdempotencyKey(method, url, body, "")
+}
+
+func makeRedirectRequestWithIdempotencyKey(method string, url string, body *strings.Reader, idempotencyKey string) (*RedirectPaymentResponse, error) {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Authorization", apiToken)
 	req.Header.Set("Content-Type", "application/json")
+	if idempotencyKey != "" {
+		req.Header.Set("Idempotency-Key", idempotencyKey)
+	}
 
 	client := &http.Client{}
 	response, err := client.Do(req)
@@ -214,6 +271,7 @@ func makeRedirectRequest(method string, url string, body *strings.Reader) (*Redi
 	if err != nil {
 		return nil, err
 	}
+	defer response.Body.Close()
 
 	if response.StatusCode != 200 {
 		return nil, fmt.Errorf("api-payment-error: %d", response.StatusCode)
@@ -229,7 +287,9 @@ func makeRedirectRequest(method string, url string, body *strings.Reader) (*Redi
 }
 
 type PaymentResponse struct {
-	Payable PayableResponse `json:"Payable"`
+	Payable   PayableResponse `json:"Payable"`
+	PaymentId string          `json:"payment_id,omitempty"`
+	CashbackResponse
 }
 type PayableResponse struct {
 	Id            string `json:"id"`
@@ -237,13 +297,35 @@ type PayableResponse struct {
 }
 
 func (p PaymentResponse) GetPaymentId() string {
+	if p.PaymentId != "" {
+		return p.PaymentId
+	}
 	return p.Payable.LastPaymentId
+}
+
+// CashbackResponse contains the optional fields returned when Payment API
+// evaluates cashback. Zero values mean that the legacy response omitted them.
+type CashbackResponse struct {
+	ServiceId                    string `json:"service_id,omitempty"`
+	CompletionType               string `json:"completion_type,omitempty"`
+	OriginalAmount               int    `json:"original_amount,omitempty"`
+	AmountCharged                int    `json:"amount_charged,omitempty"`
+	CashbackDiscountAmount       int    `json:"cashback_discount_amount,omitempty"`
+	CashbackRedeemedPoints       int    `json:"cashback_redeemed_points,omitempty"`
+	CashbackEarnedPoints         int    `json:"cashback_earned_points,omitempty"`
+	CashbackRedeemRestoredPoints int    `json:"cashback_redeem_restored_points,omitempty"`
+	CashbackEarnReversedPoints   int    `json:"cashback_earn_reversed_points,omitempty"`
+	CashbackFullyReversed        bool   `json:"cashback_fully_reversed,omitempty"`
+	CashbackRefundStatus         string `json:"cashback_refund_status,omitempty"`
+	CashbackStatus               string `json:"cashback_status,omitempty"`
 }
 
 type RedirectPaymentResponse struct {
 	PaymentId            string `json:"payment_id"`
+	OrderId              string `json:"order_id,omitempty"`
 	DsMerchantParameters string `json:"ds_merchant_parameters"`
 	DsSignatureVersion   string `json:"ds_signature_version"`
 	DsSignature          string `json:"ds_signature"`
 	RedsysUrl            string `json:"redsys_url"`
+	CashbackResponse
 }
