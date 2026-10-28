@@ -29,7 +29,17 @@ func RegisterHooks(app core.App) {
 // streamModelChange publishes the change asynchronously so the database
 // transaction is never blocked. The payload is built before the goroutine
 // because the model may change afterwards.
+//
+// It must never interfere with the request: every failure is only logged and
+// panics are recovered.
 func streamModelChange(app core.App, e *core.ModelEvent, operation string) {
+	defer func() {
+		if r := recover(); r != nil {
+			app.Logger().Warn("streaming hook panic recovered",
+				"operation", operation, "panic", r)
+		}
+	}()
+
 	p := GetPublisher()
 	if p == nil || e == nil || e.Model == nil {
 		return
@@ -56,6 +66,13 @@ func streamModelChange(app core.App, e *core.ModelEvent, operation string) {
 
 	id := e.Model.GetId()
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				app.Logger().Warn("streaming goroutine panic recovered",
+					"table", table, "id", id, "operation", operation, "panic", r)
+			}
+		}()
+
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 

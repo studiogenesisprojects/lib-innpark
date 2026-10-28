@@ -15,6 +15,8 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -223,13 +225,18 @@ func (p *Publisher) ensureInfra(ctx context.Context, table string) (*pubsub.Topi
 			topic = existing
 		} else {
 			topic, err = p.client.CreateTopic(ctx, name)
-			if err != nil {
+			switch {
+			case isAlreadyExists(err):
+				// another goroutine created it first: reuse it
+				topic = existing
+			case err != nil:
 				return nil, fmt.Errorf("failed to create topic %s: %w", name, err)
+			default:
+				if _, err := topic.Update(ctx, pubsub.TopicConfigToUpdate{RetentionDuration: topicRetention}); err != nil {
+					p.logger.Warn("failed to set topic retention", "topic", name, "error", err)
+				}
+				p.logger.Info("created Pub/Sub topic", "topic", name)
 			}
-			if _, err := topic.Update(ctx, pubsub.TopicConfigToUpdate{RetentionDuration: topicRetention}); err != nil {
-				p.logger.Warn("failed to set topic retention", "topic", name, "error", err)
-			}
-			p.logger.Info("created Pub/Sub topic", "topic", name)
 		}
 		p.mu.Lock()
 		p.topics[name] = topic
@@ -276,11 +283,16 @@ func (p *Publisher) ensureEventsTable(ctx context.Context, table string) error {
 		meta.Clustering = &bigquery.Clustering{Fields: []string{"id"}}
 	}
 
-	if err := t.Create(ctx, meta); err != nil {
+	err = t.Create(ctx, meta)
+	switch {
+	case isAlreadyExists(err):
+		// another goroutine created it first: fine
+	case err != nil:
 		return fmt.Errorf("failed to create events table %s: %w", p.eventsTable(table), err)
+	default:
+		p.logger.Info("created BigQuery events table",
+			"dataset", p.cfg.dataset, "table", p.eventsTable(table))
 	}
-	p.logger.Info("created BigQuery events table",
-		"dataset", p.cfg.dataset, "table", p.eventsTable(table))
 	return nil
 }
 
@@ -302,6 +314,10 @@ func (p *Publisher) ensureSubscription(ctx context.Context, table, topicName str
 			UseTableSchema: true,
 		},
 	})
+	if isAlreadyExists(err) {
+		// another goroutine created it first: not an error
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("failed to create BigQuery subscription %s: %w", id, err)
 	}
@@ -454,6 +470,12 @@ func pruneExcludedColumns(table string, s bigquery.Schema, exclusions []string) 
 func isNotFound(err error) bool {
 	var gerr *googleapi.Error
 	return errors.As(err, &gerr) && gerr.Code == 404
+}
+
+// isAlreadyExists reports whether the error means the resource already
+// exists (a benign race when several events provision the same table).
+func isAlreadyExists(err error) bool {
+	return status.Code(err) == codes.AlreadyExists
 }
 
 // Close stops the publisher and releases resources.
