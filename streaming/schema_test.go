@@ -116,3 +116,19 @@ func TestWithEventFields(t *testing.T) {
 		t.Error("expected event_timestamp to be added")
 	}
 }
+
+func TestPruneExcludedColumns(t *testing.T) {
+	s := pruneExcludedColumns("payment_methods", bigquery.Schema{
+		{Name: "id", Type: bigquery.StringFieldType},
+		{Name: "card_number", Type: bigquery.StringFieldType},
+		{Name: "txnid", Type: bigquery.StringFieldType},
+		{Name: "user_id", Type: bigquery.StringFieldType},
+	}, []string{"card_number", "payment_methods.txnid"})
+
+	if len(s) != 2 {
+		t.Fatalf("expected 2 fields after pruning, got %d: %v", len(s), s)
+	}
+	if schemaHas(s, "card_number") || schemaHas(s, "txnid") {
+		t.Error("expected sensitive columns to be pruned")
+	}
+}

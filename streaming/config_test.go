@@ -39,7 +39,7 @@ func TestShouldStream(t *testing.T) {
 func TestEventsTableNaming(t *testing.T) {
 	p := &Publisher{envPrefix: "default", cfg: &config{opts: Options{
 		Tables: map[string]TableConfig{
-			"integration_requests": {BQTable: "integration_requests", SkipProvision: true},
+			"integration_requests": {BQTable: "integration_requests", TopicName: "integration-requests", SkipProvision: true},
 		},
 	}}}
 
@@ -51,5 +51,8 @@ func TestEventsTableNaming(t *testing.T) {
 	}
 	if got := p.topicName("stays"); got != "default-stays" {
 		t.Errorf("topicName(stays) = %q, want default-stays", got)
+	}
+	if got := p.topicName("integration_requests"); got != "default-integration-requests" {
+		t.Errorf("topicName(integration_requests) = %q, want default-integration-requests", got)
 	}
 }

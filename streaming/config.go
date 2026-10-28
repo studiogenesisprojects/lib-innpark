@@ -10,6 +10,9 @@ import (
 type TableConfig struct {
 	// BQTable overrides the destination BigQuery table (default "<table>_events").
 	BQTable string
+	// TopicName overrides the base topic name (default the table name).
+	// Needed for legacy topics like "integration-requests".
+	TopicName string
 	// SkipProvision disables automatic creation of topic, table and
 	// subscription. Use it when the infrastructure already exists and is
 	// managed elsewhere (e.g. the legacy integration_requests flow).

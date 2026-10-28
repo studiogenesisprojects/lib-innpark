@@ -121,7 +121,11 @@ func (p *Publisher) eventsTable(table string) string {
 // topicName returns the environment-specific topic name.
 // Example: "stays" -> "dev-stays".
 func (p *Publisher) topicName(table string) string {
-	return p.envPrefix + "-" + table
+	base := table
+	if tc := p.cfg.opts.tableConfig(table); tc.TopicName != "" {
+		base = tc.TopicName
+	}
+	return p.envPrefix + "-" + base
 }
 
 // PublishModelChange publishes one create/update/delete event for a model.
@@ -324,15 +328,16 @@ func (p *Publisher) eventsSchema(ctx context.Context, table string) (bigquery.Sc
 	ds := p.bq.Dataset(p.cfg.dataset)
 
 	if md, err := ds.Table(p.eventsTable(table)).Metadata(ctx); err == nil && md.Type == bigquery.RegularTable {
-		p.cacheSchema(table, md.Schema)
-		return md.Schema, nil
+		s := pruneExcludedColumns(table, md.Schema, p.cfg.opts.ExcludeColumns)
+		p.cacheSchema(table, s)
+		return s, nil
 	} else if err != nil && !isNotFound(err) {
 		return nil, err
 	}
 
 	if p.eventsTable(table) != table {
 		if md, err := ds.Table(table).Metadata(ctx); err == nil && md.Type == bigquery.RegularTable {
-			s := withEventFields(md.Schema)
+			s := withEventFields(pruneExcludedColumns(table, md.Schema, p.cfg.opts.ExcludeColumns))
 			p.cacheSchema(table, s)
 			return s, nil
 		} else if err != nil && !isNotFound(err) {
@@ -431,6 +436,19 @@ func schemaHas(schema bigquery.Schema, name string) bool {
 		}
 	}
 	return false
+}
+
+// pruneExcludedColumns removes sensitive columns from a schema, so they are
+// neither stored in the events tables nor published in the payloads.
+func pruneExcludedColumns(table string, s bigquery.Schema, exclusions []string) bigquery.Schema {
+	out := make(bigquery.Schema, 0, len(s))
+	for _, f := range s {
+		if isExcludedColumn(table, f.Name, exclusions) {
+			continue
+		}
+		out = append(out, f)
+	}
+	return out
 }
 
 func isNotFound(err error) bool {
