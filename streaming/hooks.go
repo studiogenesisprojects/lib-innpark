@@ -12,6 +12,7 @@ import (
 // the tables enabled for streaming. Call it once at startup, after
 // InitPublisher.
 func RegisterHooks(app core.App) {
+	app.Logger().Info("etl-debug: registering streaming hooks")
 	app.OnModelAfterCreate().Add(func(e *core.ModelEvent) error {
 		streamModelChange(app, e, "create")
 		return nil
@@ -33,6 +34,7 @@ func RegisterHooks(app core.App) {
 // It must never interfere with the request: every failure is only logged and
 // panics are recovered.
 func streamModelChange(app core.App, e *core.ModelEvent, operation string) {
+	app.Logger().Info("etl-debug: hook invoked", "operation", operation)
 	defer func() {
 		if r := recover(); r != nil {
 			app.Logger().Warn("streaming hook panic recovered",
