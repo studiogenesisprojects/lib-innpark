@@ -35,3 +35,17 @@ func TestWatermarkViewSQL(t *testing.T) {
 		}
 	}
 }
+func TestDedupViewSQLWithNulledColumns(t *testing.T) {
+	sql := DedupViewSQL("innpark", "prod_onstreet", "users_events", "users",
+		NulledColumn{Name: "avatar", Type: "STRING"},
+		NulledColumn{Name: "passwordHash", Type: "STRING"},
+	)
+	for _, want := range []string{
+		"SELECT * EXCEPT(operation, event_timestamp, _rk),\n  CAST(NULL AS STRING) AS avatar,\n  CAST(NULL AS STRING) AS passwordHash FROM (",
+		"FROM `innpark.prod_onstreet.users_events`",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("view SQL missing %q:\n%s", want, sql)
+		}
+	}
+}

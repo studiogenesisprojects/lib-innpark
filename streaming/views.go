@@ -2,17 +2,32 @@ package streaming
 
 import "fmt"
 
+// NulledColumn is a column that belongs to the consumer contract (the current
+// table) but is not stored in the events table because it is excluded for
+// privacy or has no analytical value (passwords, cards, file references...).
+// The view exposes it as a typed NULL so consumers keep working unchanged.
+type NulledColumn struct {
+	Name string
+	Type string // BigQuery type, e.g. "STRING", "TIMESTAMP", "INTEGER"
+}
+
 // DedupViewSQL returns the DDL for the consumer view of a table: one row per
 // id (latest version wins), with deleted rows hidden. The view exposes
 // exactly the business columns of the events table (the event envelope is
-// hidden), so existing consumers keep working unchanged.
-func DedupViewSQL(project, dataset, eventsTable, viewName string) string {
+// hidden) plus the nulled columns, so existing consumers keep working
+// unchanged.
+func DedupViewSQL(project, dataset, eventsTable, viewName string, nulled ...NulledColumn) string {
 	events := fmt.Sprintf("`%s.%s.%s`", project, dataset, eventsTable)
 	view := fmt.Sprintf("`%s.%s.%s`", project, dataset, viewName)
 
+	nullCols := ""
+	for _, c := range nulled {
+		nullCols += fmt.Sprintf(",\n  CAST(NULL AS %s) AS %s", c.Type, c.Name)
+	}
+
 	return fmt.Sprintf(
 		`CREATE VIEW %s AS
-SELECT * EXCEPT(%s, %s, _rk) FROM (
+SELECT * EXCEPT(%s, %s, _rk)%s FROM (
   SELECT *,
     ROW_NUMBER() OVER (PARTITION BY id ORDER BY updated DESC, %s DESC) AS _rk
   FROM %s
@@ -20,6 +35,7 @@ SELECT * EXCEPT(%s, %s, _rk) FROM (
 WHERE _rk = 1 AND COALESCE(%s, '') != 'delete'`,
 		view,
 		fieldOperation, fieldEventTimestamp,
+		nullCols,
 		fieldEventTimestamp,
 		events,
 		fieldOperation,

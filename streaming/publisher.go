@@ -13,6 +13,7 @@ import (
 	"cloud.google.com/go/pubsub"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/models/schema"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc/codes"
@@ -364,8 +365,15 @@ func (p *Publisher) eventsSchema(ctx context.Context, table string) (bigquery.Sc
 
 	ds := p.bq.Dataset(p.cfg.dataset)
 
+	// PocketBase file fields are excluded by default: they only hold file
+	// names pointing to binaries.
+	exclusions := p.cfg.opts.ExcludeColumns
+	if !p.cfg.opts.KeepFileFields {
+		exclusions = append(exclusions, p.fileFields(table)...)
+	}
+
 	if md, err := ds.Table(p.eventsTable(table)).Metadata(ctx); err == nil && md.Type == bigquery.RegularTable {
-		s := pruneExcludedColumns(table, md.Schema, p.cfg.opts.ExcludeColumns)
+		s := pruneExcludedColumns(table, md.Schema, exclusions)
 		p.cacheSchema(table, s)
 		return s, nil
 	} else if err != nil && !isNotFound(err) {
@@ -374,7 +382,7 @@ func (p *Publisher) eventsSchema(ctx context.Context, table string) (bigquery.Sc
 
 	if p.eventsTable(table) != table {
 		if md, err := ds.Table(table).Metadata(ctx); err == nil && md.Type == bigquery.RegularTable {
-			s := withEventFields(pruneExcludedColumns(table, md.Schema, p.cfg.opts.ExcludeColumns))
+			s := withEventFields(pruneExcludedColumns(table, md.Schema, exclusions))
 			p.cacheSchema(table, s)
 			return s, nil
 		} else if err != nil && !isNotFound(err) {
@@ -392,9 +400,25 @@ func (p *Publisher) eventsSchema(ctx context.Context, table string) (bigquery.Sc
 		return nil, fmt.Errorf("table %s not found in BigQuery nor in SQLite", table)
 	}
 
-	s = schemaFromSQLiteColumns(table, cols, p.cfg.opts.ExcludeColumns)
+	s = schemaFromSQLiteColumns(table, cols, exclusions)
 	p.cacheSchema(table, s)
 	return s, nil
+}
+
+// fileFields returns "table.column" entries for the PocketBase file fields of
+// a collection. Returns nil when the collection cannot be inspected.
+func (p *Publisher) fileFields(table string) []string {
+	col, err := p.app.Dao().FindCollectionByNameOrId(table)
+	if err != nil || col == nil {
+		return nil
+	}
+	var out []string
+	for _, f := range col.Schema.Fields() {
+		if f.Type == schema.FieldTypeFile {
+			out = append(out, table+"."+f.Name)
+		}
+	}
+	return out
 }
 
 func (p *Publisher) cacheSchema(table string, s bigquery.Schema) {

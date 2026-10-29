@@ -26,6 +26,9 @@ type Options struct {
 	// ExcludeColumns are columns that must never leave the database.
 	// Each entry is "column" (for any table) or "table.column".
 	ExcludeColumns []string
+	// KeepFileFields streams PocketBase file fields. They are excluded by
+	// default: they only reference binaries and are of no analytical value.
+	KeepFileFields bool
 	// Tables holds per-table overrides.
 	Tables map[string]TableConfig
 }
