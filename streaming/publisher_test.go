@@ -85,6 +85,24 @@ func TestStringifyComplexFields(t *testing.T) {
 	}
 }
 
+func TestTopicNameIsServiceScoped(t *testing.T) {
+	onstreet := &Publisher{envPrefix: "dev", cfg: &config{service: "onstreet", opts: Options{}}}
+	payment := &Publisher{envPrefix: "dev", cfg: &config{service: "payment", opts: Options{}}}
+
+	if a, b := onstreet.topicName("users"), payment.topicName("users"); a == b {
+		t.Fatalf("different services must not share a topic, both got %q", a)
+	} else if a != "dev-onstreet-users" || b != "dev-payment-users" {
+		t.Fatalf("unexpected topic names: %q / %q", a, b)
+	}
+
+	legacy := &Publisher{envPrefix: "prod", cfg: &config{service: "offstreet", opts: Options{
+		Tables: map[string]TableConfig{"integration_requests": {TopicName: "integration-requests"}},
+	}}}
+	if got := legacy.topicName("integration_requests"); got != "prod-integration-requests" {
+		t.Fatalf("legacy override broken: %q", got)
+	}
+}
+
 func TestIsAlreadyExistsBigQuery409(t *testing.T) {
 	err := &googleapi.Error{Code: 409, Message: "Already Exists: Table x"}
 	if !isAlreadyExists(err) {

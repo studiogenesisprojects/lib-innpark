@@ -37,6 +37,7 @@ type config struct {
 	project   string
 	dataset   string
 	envPrefix string
+	service   string
 	credsFile string
 	opts      Options
 }
@@ -65,6 +66,7 @@ func loadConfig(opts Options) (*config, error) {
 		project:   project,
 		dataset:   dataset,
 		envPrefix: extractEnvPrefix(dataset),
+		service:   extractService(dataset),
 		credsFile: credsFile,
 		opts:      opts,
 	}, nil
@@ -77,6 +79,17 @@ func extractEnvPrefix(dataset string) string {
 		return dataset[:i]
 	}
 	return "default"
+}
+
+// extractService returns the service part of the dataset name.
+// Examples: "dev_offstreet" -> "offstreet", "prod_payment" -> "payment".
+// It keeps topics of different APIs apart: onstreet and payment both have a
+// "users" table and must not share a topic.
+func extractService(dataset string) string {
+	if i := strings.Index(dataset, "_"); i > 0 && i+1 < len(dataset) {
+		return dataset[i+1:]
+	}
+	return dataset
 }
 
 // isExcludedTable reports whether the table is excluded from streaming.

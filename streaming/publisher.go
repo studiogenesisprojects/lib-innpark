@@ -122,14 +122,16 @@ func (p *Publisher) eventsTable(table string) string {
 	return table + "_events"
 }
 
-// topicName returns the environment-specific topic name.
-// Example: "stays" -> "dev-stays".
+// topicName returns the environment and service specific topic name, so
+// different APIs never share a topic for a table with the same name.
+// Example: "dev_payment" + "users" -> "dev-payment-users".
 func (p *Publisher) topicName(table string) string {
 	base := table
 	if tc := p.cfg.opts.tableConfig(table); tc.TopicName != "" {
 		base = tc.TopicName
+		return p.envPrefix + "-" + base
 	}
-	return p.envPrefix + "-" + base
+	return p.envPrefix + "-" + p.cfg.service + "-" + base
 }
 
 // PublishModelChange publishes one create/update/delete event for a model.

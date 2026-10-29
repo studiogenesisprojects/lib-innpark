@@ -17,6 +17,20 @@ func TestExtractEnvPrefix(t *testing.T) {
 	}
 }
 
+func TestExtractService(t *testing.T) {
+	cases := map[string]string{
+		"dev_offstreet": "offstreet",
+		"prod_payment":  "payment",
+		"prod_onstreet": "onstreet",
+		"nodash":        "nodash",
+	}
+	for in, want := range cases {
+		if got := extractService(in); got != want {
+			t.Errorf("extractService(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestShouldStream(t *testing.T) {
 	p := &Publisher{cfg: &config{opts: Options{
 		ExcludeTables: []string{"integration_requests"},
@@ -37,7 +51,7 @@ func TestShouldStream(t *testing.T) {
 }
 
 func TestEventsTableNaming(t *testing.T) {
-	p := &Publisher{envPrefix: "default", cfg: &config{opts: Options{
+	p := &Publisher{envPrefix: "default", cfg: &config{service: "onstreet", opts: Options{
 		Tables: map[string]TableConfig{
 			"integration_requests": {BQTable: "integration_requests", TopicName: "integration-requests", SkipProvision: true},
 		},
@@ -49,8 +63,8 @@ func TestEventsTableNaming(t *testing.T) {
 	if got := p.eventsTable("integration_requests"); got != "integration_requests" {
 		t.Errorf("eventsTable(integration_requests) = %q, want integration_requests", got)
 	}
-	if got := p.topicName("stays"); got != "default-stays" {
-		t.Errorf("topicName(stays) = %q, want default-stays", got)
+	if got := p.topicName("stays"); got != "default-onstreet-stays" {
+		t.Errorf("topicName(stays) = %q, want default-onstreet-stays", got)
 	}
 	if got := p.topicName("integration_requests"); got != "default-integration-requests" {
 		t.Errorf("topicName(integration_requests) = %q, want default-integration-requests", got)
