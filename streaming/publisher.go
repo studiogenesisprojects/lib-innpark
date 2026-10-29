@@ -145,6 +145,7 @@ func (p *Publisher) PublishModelChange(ctx context.Context, table, operation str
 
 	filtered := filterSchemaFields(schema, data)
 	coerceTypes(schema, filtered)
+	normalizeTimestamps(schema, filtered)
 	convertJSONFields(schema, filtered)
 	if schemaHas(schema, fieldOperation) {
 		filtered[fieldOperation] = operation
@@ -423,6 +424,39 @@ func coerceTypes(schema bigquery.Schema, data map[string]interface{}) {
 			data[f.Name] = int64(v)
 		}
 	}
+}
+
+// normalizeTimestamps removes empty or unparseable timestamp values.
+// PocketBase marshals zero types.DateTime values as "", which BigQuery
+// rejects for TIMESTAMP columns with a permanent insert error, dropping
+// the whole message.
+func normalizeTimestamps(schema bigquery.Schema, data map[string]interface{}) {
+	for _, f := range schema {
+		if f.Type != bigquery.TimestampFieldType {
+			continue
+		}
+		s, ok := data[f.Name].(string)
+		if !ok {
+			continue
+		}
+		if s == "" || !parsableTimestamp(s) {
+			delete(data, f.Name)
+		}
+	}
+}
+
+var timestampLayouts = []string{
+	time.RFC3339Nano,
+	"2006-01-02 15:04:05.999999999Z07:00", // PocketBase types.DateTime
+}
+
+func parsableTimestamp(s string) bool {
+	for _, layout := range timestampLayouts {
+		if _, err := time.Parse(layout, s); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // convertJSONFields stringifies values of JSON-type columns so BigQuery
