@@ -10,17 +10,16 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 )
 
-// streamLog writes streaming diagnostics to stdout directly. PocketBase's
-// streamLog switches to its internal logs store after bootstrap, which
-// hides these messages from Cloud Logging on Cloud Run (they only print with
-// --dev). Streaming must be observable at all times.
+// streamLog writes streaming logs to stdout directly. PocketBase's app.Logger()
+// switches to its internal logs store after bootstrap, which hides messages
+// from Cloud Logging on Cloud Run (they only print with --dev). Streaming must
+// stay observable at all times.
 var streamLog = slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 // RegisterHooks streams every model change (create, update and delete) of
 // the tables enabled for streaming. Call it once at startup, after
 // InitPublisher.
 func RegisterHooks(app core.App) {
-	streamLog.Info("etl-debug: registering streaming hooks")
 	app.OnModelAfterCreate().Add(func(e *core.ModelEvent) error {
 		streamModelChange(app, e, "create")
 		return nil
@@ -42,7 +41,6 @@ func RegisterHooks(app core.App) {
 // It must never interfere with the request: every failure is only logged and
 // panics are recovered.
 func streamModelChange(app core.App, e *core.ModelEvent, operation string) {
-	streamLog.Info("etl-debug: hook invoked", "operation", operation)
 	defer func() {
 		if r := recover(); r != nil {
 			streamLog.Warn("streaming hook panic recovered",
@@ -52,20 +50,13 @@ func streamModelChange(app core.App, e *core.ModelEvent, operation string) {
 
 	p := GetPublisher()
 	if p == nil || e == nil || e.Model == nil {
-		streamLog.Warn("etl-debug: skipped (nil)",
-			"operation", operation, "publisher", p != nil, "event", e != nil)
 		return
 	}
 
 	table := e.Model.TableName()
 	if !p.ShouldStream(table) {
-		if !isInternalTable(table) {
-			streamLog.Info("etl-debug: table not streamed", "table", table, "operation", operation)
-		}
 		return
 	}
-
-	streamLog.Info("etl-debug: publishing", "table", table, "id", e.Model.GetId(), "operation", operation)
 
 	jsonData, err := json.Marshal(e.Model)
 	if err != nil {
@@ -82,7 +73,6 @@ func streamModelChange(app core.App, e *core.ModelEvent, operation string) {
 	}
 
 	id := e.Model.GetId()
-	payloadJSON, _ := json.Marshal(data)
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -100,14 +90,6 @@ func streamModelChange(app core.App, e *core.ModelEvent, operation string) {
 			return
 		}
 
-		streamLog.Info("etl-debug: published", "table", table, "id", id, "operation", operation, "payload", truncate(string(payloadJSON), 1200))
+		streamLog.Debug("streamed model change", "table", table, "id", id, "operation", operation)
 	}()
-}
-
-// truncate shortens a string for logging.
-func truncate(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:max] + "..."
 }
