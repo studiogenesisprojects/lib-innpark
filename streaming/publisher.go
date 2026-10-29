@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -149,7 +151,7 @@ func (p *Publisher) PublishModelChange(ctx context.Context, table, operation str
 
 	filtered := filterSchemaFields(schema, data)
 	coerceTypes(schema, filtered)
-	normalizeTimestamps(schema, filtered)
+	sanitizeByType(schema, filtered)
 	stringifyComplexFields(schema, filtered)
 	convertJSONFields(schema, filtered)
 	if schemaHas(schema, fieldOperation) {
@@ -485,6 +487,67 @@ func stringifyComplexFields(schema bigquery.Schema, data map[string]interface{})
 		case map[string]interface{}, []interface{}:
 			if b, err := json.Marshal(v); err == nil {
 				data[f.Name] = string(b)
+			}
+		}
+	}
+}
+
+// sanitizeByType removes or converts values that BigQuery would reject with a
+// permanent error (which drops the whole message and can block the
+// subscription). PocketBase marshals empty values as "" regardless of the
+// underlying column type.
+func sanitizeByType(schema bigquery.Schema, data map[string]interface{}) {
+	for _, f := range schema {
+		v, ok := data[f.Name]
+		if !ok {
+			continue
+		}
+		s, isString := v.(string)
+
+		switch f.Type {
+		case bigquery.TimestampFieldType:
+			if isString && (s == "" || !parsableTimestamp(s)) {
+				delete(data, f.Name)
+			}
+		case bigquery.IntegerFieldType:
+			if !isString {
+				continue
+			}
+			if s == "" {
+				delete(data, f.Name)
+				continue
+			}
+			if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+				data[f.Name] = n
+			} else if fl, err := strconv.ParseFloat(s, 64); err == nil {
+				data[f.Name] = int64(fl)
+			} else {
+				delete(data, f.Name)
+			}
+		case bigquery.FloatFieldType:
+			if !isString {
+				continue
+			}
+			if s == "" {
+				delete(data, f.Name)
+				continue
+			}
+			if fl, err := strconv.ParseFloat(s, 64); err == nil {
+				data[f.Name] = fl
+			} else {
+				delete(data, f.Name)
+			}
+		case bigquery.BooleanFieldType:
+			if !isString {
+				continue
+			}
+			switch strings.ToLower(s) {
+			case "true", "1":
+				data[f.Name] = true
+			case "false", "0":
+				data[f.Name] = false
+			default:
+				delete(data, f.Name)
 			}
 		}
 	}

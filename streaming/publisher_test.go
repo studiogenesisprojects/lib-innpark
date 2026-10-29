@@ -112,3 +112,43 @@ func TestIsAlreadyExistsBigQuery409(t *testing.T) {
 		t.Error("expected googleapi 403 not to be treated as AlreadyExists")
 	}
 }
+
+func TestSanitizeByType(t *testing.T) {
+	schema := bigquery.Schema{
+		{Name: "created", Type: bigquery.TimestampFieldType},
+		{Name: "mobile_phone", Type: bigquery.IntegerFieldType}, // BQ INTEGER, PB sends ""
+		{Name: "counter", Type: bigquery.IntegerFieldType},
+		{Name: "amount", Type: bigquery.FloatFieldType},
+		{Name: "flag", Type: bigquery.BooleanFieldType},
+		{Name: "name", Type: bigquery.StringFieldType},
+	}
+	data := map[string]interface{}{
+		"created":      "",
+		"mobile_phone": "",
+		"counter":      "42",
+		"amount":       "12.5",
+		"flag":         "true",
+		"name":         "",
+	}
+
+	sanitizeByType(schema, data)
+
+	if _, ok := data["created"]; ok {
+		t.Error("empty timestamp must be dropped")
+	}
+	if _, ok := data["mobile_phone"]; ok {
+		t.Error("empty string for INTEGER must be dropped")
+	}
+	if data["counter"] != int64(42) {
+		t.Errorf("numeric string for INTEGER must be coerced, got %#v", data["counter"])
+	}
+	if data["amount"] != 12.5 {
+		t.Errorf("numeric string for FLOAT must be coerced, got %#v", data["amount"])
+	}
+	if data["flag"] != true {
+		t.Errorf("boolean string must be coerced, got %#v", data["flag"])
+	}
+	if data["name"] != "" {
+		t.Error("empty string for STRING must be kept")
+	}
+}
