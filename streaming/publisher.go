@@ -333,16 +333,37 @@ func (p *Publisher) ensureSubscription(ctx context.Context, table, topicName str
 	if exists, err := sub.Exists(ctx); err != nil {
 		return fmt.Errorf("failed to check subscription %s: %w", id, err)
 	} else if exists {
+		p.ensureDeadLetter(ctx, sub, id)
 		return nil
 	}
 
-	_, err := p.client.CreateSubscription(ctx, id, pubsub.SubscriptionConfig{
+	cfg := pubsub.SubscriptionConfig{
 		Topic: p.client.Topic(topicName),
 		BigQueryConfig: pubsub.BigQueryConfig{
 			Table:          fmt.Sprintf("%s.%s.%s", p.cfg.project, p.cfg.dataset, p.eventsTable(table)),
 			UseTableSchema: true,
 		},
-	})
+	}
+
+	// A message that always fails blocks the subscription, so bounded retries
+	// with a dead-letter topic are the safety net. If the topic or its IAM
+	// grant is missing, fall back to a plain subscription (with a warning)
+	// instead of failing to stream the table at all.
+	dlq := p.deadLetterTopic()
+	if dlq != "" {
+		cfg.DeadLetterPolicy = &pubsub.DeadLetterPolicy{
+			DeadLetterTopic:     fmt.Sprintf("projects/%s/topics/%s", p.cfg.project, dlq),
+			MaxDeliveryAttempts: p.cfg.opts.maxDeliveryAttempts(),
+		}
+	}
+
+	_, err := p.client.CreateSubscription(ctx, id, cfg)
+	if err != nil && cfg.DeadLetterPolicy != nil && !isAlreadyExists(err) {
+		p.logger.Warn("dead-letter policy rejected, creating the subscription without it",
+			"subscription", id, "dead_letter_topic", dlq, "error", err)
+		cfg.DeadLetterPolicy = nil
+		_, err = p.client.CreateSubscription(ctx, id, cfg)
+	}
 	if isAlreadyExists(err) {
 		// another goroutine created it first: not an error
 		return nil
@@ -350,8 +371,41 @@ func (p *Publisher) ensureSubscription(ctx context.Context, table, topicName str
 	if err != nil {
 		return fmt.Errorf("failed to create BigQuery subscription %s: %w", id, err)
 	}
-	p.logger.Info("created BigQuery subscription", "subscription", id)
+	p.logger.Info("created BigQuery subscription", "subscription", id, "dead_letter", dlq)
 	return nil
+}
+
+// ensureDeadLetter adds the dead-letter policy to an existing subscription
+// that was created without one (older deployments). Best effort: failures are
+// only logged.
+func (p *Publisher) ensureDeadLetter(ctx context.Context, sub *pubsub.Subscription, id string) {
+	dlq := p.deadLetterTopic()
+	if dlq == "" {
+		return
+	}
+	cfg, err := sub.Config(ctx)
+	if err != nil || cfg.DeadLetterPolicy != nil {
+		return
+	}
+	cfg.DeadLetterPolicy = &pubsub.DeadLetterPolicy{
+		DeadLetterTopic:     fmt.Sprintf("projects/%s/topics/%s", p.cfg.project, dlq),
+		MaxDeliveryAttempts: p.cfg.opts.maxDeliveryAttempts(),
+	}
+	if _, err := sub.Update(ctx, pubsub.SubscriptionConfigToUpdate{
+		DeadLetterPolicy: cfg.DeadLetterPolicy,
+	}); err != nil {
+		p.logger.Warn("could not add the dead-letter policy", "subscription", id, "error", err)
+		return
+	}
+	p.logger.Info("added dead-letter policy", "subscription", id, "dead_letter", dlq)
+}
+
+// deadLetterTopic returns the configured dead-letter topic name, if any.
+func (p *Publisher) deadLetterTopic() string {
+	if p.cfg.opts.DeadLetterTopic != "" {
+		return p.cfg.opts.DeadLetterTopic
+	}
+	return p.cfg.envPrefix + "-deadletter"
 }
 
 // provisionLock returns the per-table provisioning mutex.

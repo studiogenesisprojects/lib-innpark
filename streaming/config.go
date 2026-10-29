@@ -29,6 +29,15 @@ type Options struct {
 	// KeepFileFields streams PocketBase file fields. They are excluded by
 	// default: they only reference binaries and are of no analytical value.
 	KeepFileFields bool
+	// DeadLetterTopic is the topic used for messages that cannot be written
+	// after MaxDeliveryAttempts (default "<env>-deadletter"). A message that
+	// fails forever blocks the subscription, so this is not optional in
+	// production. The topic must exist and grant publish to the Pub/Sub
+	// service agent; otherwise subscriptions are created without it.
+	DeadLetterTopic string
+	// MaxDeliveryAttempts is the delivery cap before a message is sent to the
+	// dead-letter topic. Defaults to 5.
+	MaxDeliveryAttempts int
 	// Tables holds per-table overrides.
 	Tables map[string]TableConfig
 }
@@ -90,6 +99,14 @@ func extractService(dataset string) string {
 		return dataset[i+1:]
 	}
 	return dataset
+}
+
+// maxDeliveryAttempts returns the configured cap (default 5).
+func (o Options) maxDeliveryAttempts() int {
+	if o.MaxDeliveryAttempts > 0 {
+		return o.MaxDeliveryAttempts
+	}
+	return 5
 }
 
 // isExcludedTable reports whether the table is excluded from streaming.
