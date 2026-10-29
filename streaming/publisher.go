@@ -146,6 +146,7 @@ func (p *Publisher) PublishModelChange(ctx context.Context, table, operation str
 	filtered := filterSchemaFields(schema, data)
 	coerceTypes(schema, filtered)
 	normalizeTimestamps(schema, filtered)
+	stringifyComplexFields(schema, filtered)
 	convertJSONFields(schema, filtered)
 	if schemaHas(schema, fieldOperation) {
 		filtered[fieldOperation] = operation
@@ -422,6 +423,24 @@ func coerceTypes(schema bigquery.Schema, data map[string]interface{}) {
 			}
 		case float64:
 			data[f.Name] = int64(v)
+		}
+	}
+}
+
+// stringifyComplexFields serializes objects and arrays into JSON strings
+// for STRING columns. PocketBase marshals json fields (types.JsonMap) and
+// multi-file fields as objects/arrays, which BigQuery rejects on STRING
+// columns with a permanent error, dropping the whole message.
+func stringifyComplexFields(schema bigquery.Schema, data map[string]interface{}) {
+	for _, f := range schema {
+		if f.Type != bigquery.StringFieldType {
+			continue
+		}
+		switch v := data[f.Name].(type) {
+		case map[string]interface{}, []interface{}:
+			if b, err := json.Marshal(v); err == nil {
+				data[f.Name] = string(b)
+			}
 		}
 	}
 }

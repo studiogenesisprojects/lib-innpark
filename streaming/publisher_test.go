@@ -53,3 +53,33 @@ func TestNormalizeTimestamps(t *testing.T) {
 		t.Error("expected non-timestamp fields to be untouched")
 	}
 }
+
+func TestStringifyComplexFields(t *testing.T) {
+	schema := bigquery.Schema{
+		{Name: "settings", Type: bigquery.StringFieldType}, // Prod BQ: STRING
+		{Name: "logos", Type: bigquery.StringFieldType},    // multi-file: STRING
+		{Name: "payload", Type: bigquery.JSONFieldType},    // JSON column: leave to convertJSONFields
+		{Name: "name", Type: bigquery.StringFieldType},
+	}
+	data := map[string]interface{}{
+		"settings": map[string]interface{}{"lang": "es"},
+		"logos":    []interface{}{"logo1.png", "logo2.png"},
+		"payload":  map[string]interface{}{"keep": "object"},
+		"name":     "plain",
+	}
+
+	stringifyComplexFields(schema, data)
+
+	if got, ok := data["settings"].(string); !ok || got != `{"lang":"es"}` {
+		t.Errorf("settings = %#v, want JSON string", data["settings"])
+	}
+	if got, ok := data["logos"].(string); !ok || got != `["logo1.png","logo2.png"]` {
+		t.Errorf("logos = %#v, want JSON string", data["logos"])
+	}
+	if _, ok := data["payload"].(map[string]interface{}); !ok {
+		t.Error("JSON-typed columns must be left untouched")
+	}
+	if data["name"] != "plain" {
+		t.Error("plain strings must be untouched")
+	}
+}
