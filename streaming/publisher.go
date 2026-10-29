@@ -159,6 +159,8 @@ func (p *Publisher) PublishModelChange(ctx context.Context, table, operation str
 		return fmt.Errorf("failed to marshal event: %w", err)
 	}
 
+	streamLog.Info("etl-debug: final payload", "table", table, "operation", operation, "payload", truncate(string(payload), 1500))
+
 	topic, err := p.ensureInfra(ctx, table)
 	if err != nil {
 		return fmt.Errorf("ensure infrastructure for %s: %w", table, err)
