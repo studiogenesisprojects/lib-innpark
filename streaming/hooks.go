@@ -3,16 +3,24 @@ package streaming
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
+	"os"
 	"time"
 
 	"github.com/pocketbase/pocketbase/core"
 )
 
+// streamLog writes streaming diagnostics to stdout directly. PocketBase's
+// streamLog switches to its internal logs store after bootstrap, which
+// hides these messages from Cloud Logging on Cloud Run (they only print with
+// --dev). Streaming must be observable at all times.
+var streamLog = slog.New(slog.NewTextHandler(os.Stdout, nil))
+
 // RegisterHooks streams every model change (create, update and delete) of
 // the tables enabled for streaming. Call it once at startup, after
 // InitPublisher.
 func RegisterHooks(app core.App) {
-	app.Logger().Info("etl-debug: registering streaming hooks")
+	streamLog.Info("etl-debug: registering streaming hooks")
 	app.OnModelAfterCreate().Add(func(e *core.ModelEvent) error {
 		streamModelChange(app, e, "create")
 		return nil
@@ -34,17 +42,17 @@ func RegisterHooks(app core.App) {
 // It must never interfere with the request: every failure is only logged and
 // panics are recovered.
 func streamModelChange(app core.App, e *core.ModelEvent, operation string) {
-	app.Logger().Info("etl-debug: hook invoked", "operation", operation)
+	streamLog.Info("etl-debug: hook invoked", "operation", operation)
 	defer func() {
 		if r := recover(); r != nil {
-			app.Logger().Warn("streaming hook panic recovered",
+			streamLog.Warn("streaming hook panic recovered",
 				"operation", operation, "panic", r)
 		}
 	}()
 
 	p := GetPublisher()
 	if p == nil || e == nil || e.Model == nil {
-		app.Logger().Warn("etl-debug: skipped (nil)",
+		streamLog.Warn("etl-debug: skipped (nil)",
 			"operation", operation, "publisher", p != nil, "event", e != nil)
 		return
 	}
@@ -52,23 +60,23 @@ func streamModelChange(app core.App, e *core.ModelEvent, operation string) {
 	table := e.Model.TableName()
 	if !p.ShouldStream(table) {
 		if !isInternalTable(table) {
-			app.Logger().Info("etl-debug: table not streamed", "table", table, "operation", operation)
+			streamLog.Info("etl-debug: table not streamed", "table", table, "operation", operation)
 		}
 		return
 	}
 
-	app.Logger().Info("etl-debug: publishing", "table", table, "id", e.Model.GetId(), "operation", operation)
+	streamLog.Info("etl-debug: publishing", "table", table, "id", e.Model.GetId(), "operation", operation)
 
 	jsonData, err := json.Marshal(e.Model)
 	if err != nil {
-		app.Logger().Warn("failed to serialize model for streaming",
+		streamLog.Warn("failed to serialize model for streaming",
 			"table", table, "id", e.Model.GetId(), "error", err)
 		return
 	}
 
 	var data map[string]interface{}
 	if err := json.Unmarshal(jsonData, &data); err != nil {
-		app.Logger().Warn("failed to unmarshal model data for streaming",
+		streamLog.Warn("failed to unmarshal model data for streaming",
 			"table", table, "id", e.Model.GetId(), "error", err)
 		return
 	}
@@ -77,7 +85,7 @@ func streamModelChange(app core.App, e *core.ModelEvent, operation string) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				app.Logger().Warn("streaming goroutine panic recovered",
+				streamLog.Warn("streaming goroutine panic recovered",
 					"table", table, "id", id, "operation", operation, "panic", r)
 			}
 		}()
@@ -86,11 +94,11 @@ func streamModelChange(app core.App, e *core.ModelEvent, operation string) {
 		defer cancel()
 
 		if err := p.PublishModelChange(ctx, table, operation, data); err != nil {
-			app.Logger().Warn("failed to stream model change",
+			streamLog.Warn("failed to stream model change",
 				"table", table, "id", id, "operation", operation, "error", err)
 			return
 		}
 
-		app.Logger().Info("etl-debug: published", "table", table, "id", id, "operation", operation)
+		streamLog.Info("etl-debug: published", "table", table, "id", id, "operation", operation)
 	}()
 }

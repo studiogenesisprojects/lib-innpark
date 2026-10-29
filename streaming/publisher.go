@@ -85,14 +85,14 @@ func InitPublisher(app core.App, opts Options) error {
 			cfg:         cfg,
 			client:      client,
 			bq:          bq,
-			logger:      app.Logger(),
+			logger:      streamLog,
 			envPrefix:   cfg.envPrefix,
 			topics:      map[string]*pubsub.Topic{},
 			schemas:     map[string]bigquery.Schema{},
 			provisioned: map[string]bool{},
 		}
 
-		app.Logger().Info("streaming publisher initialized",
+		streamLog.Info("streaming publisher initialized",
 			"project", cfg.project, "dataset", cfg.dataset, "env", cfg.envPrefix)
 	})
 
