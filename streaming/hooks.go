@@ -82,6 +82,7 @@ func streamModelChange(app core.App, e *core.ModelEvent, operation string) {
 	}
 
 	id := e.Model.GetId()
+	payloadJSON, _ := json.Marshal(data)
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -99,6 +100,14 @@ func streamModelChange(app core.App, e *core.ModelEvent, operation string) {
 			return
 		}
 
-		streamLog.Info("etl-debug: published", "table", table, "id", id, "operation", operation)
+		streamLog.Info("etl-debug: published", "table", table, "id", id, "operation", operation, "payload", truncate(string(payloadJSON), 1200))
 	}()
+}
+
+// truncate shortens a string for logging.
+func truncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
 }
