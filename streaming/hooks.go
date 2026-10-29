@@ -42,13 +42,20 @@ func streamModelChange(app core.App, e *core.ModelEvent, operation string) {
 
 	p := GetPublisher()
 	if p == nil || e == nil || e.Model == nil {
+		app.Logger().Warn("etl-debug: skipped (nil)",
+			"operation", operation, "publisher", p != nil, "event", e != nil)
 		return
 	}
 
 	table := e.Model.TableName()
 	if !p.ShouldStream(table) {
+		if !isInternalTable(table) {
+			app.Logger().Info("etl-debug: table not streamed", "table", table, "operation", operation)
+		}
 		return
 	}
+
+	app.Logger().Info("etl-debug: publishing", "table", table, "id", e.Model.GetId(), "operation", operation)
 
 	jsonData, err := json.Marshal(e.Model)
 	if err != nil {
@@ -82,7 +89,6 @@ func streamModelChange(app core.App, e *core.ModelEvent, operation string) {
 			return
 		}
 
-		app.Logger().Debug("streamed model change",
-			"table", table, "id", id, "operation", operation)
+		app.Logger().Info("etl-debug: published", "table", table, "id", id, "operation", operation)
 	}()
 }
