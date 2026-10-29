@@ -40,7 +40,7 @@ type Publisher struct {
 	envPrefix string
 
 	mu          sync.RWMutex
-	provisionMu sync.Mutex // serializes infrastructure provisioning
+	provLocks   map[string]*sync.Mutex // per-table provisioning locks
 	topics      map[string]*pubsub.Topic
 	schemas     map[string]bigquery.Schema
 	provisioned map[string]bool
@@ -92,6 +92,7 @@ func InitPublisher(app core.App, opts Options) error {
 			logger:      streamLog,
 			envPrefix:   cfg.envPrefix,
 			topics:      map[string]*pubsub.Topic{},
+			provLocks:   map[string]*sync.Mutex{},
 			schemas:     map[string]bigquery.Schema{},
 			provisioned: map[string]bool{},
 		}
@@ -227,9 +228,11 @@ func (p *Publisher) ensureInfra(ctx context.Context, table string) (*pubsub.Topi
 
 	// Provisioning involves several remote calls and must not be run twice
 	// concurrently for the same table (concurrent events would race and one
-	// of them would drop its message on a duplicate-resource error).
-	p.provisionMu.Lock()
-	defer p.provisionMu.Unlock()
+	// of them would drop its message on a duplicate-resource error). The lock
+	// is per table so different tables provision in parallel.
+	provMu := p.provisionLock(table)
+	provMu.Lock()
+	defer provMu.Unlock()
 
 	// Re-check now that we hold the lock: another goroutine may have
 	// provisioned the infrastructure while we waited.
@@ -349,6 +352,21 @@ func (p *Publisher) ensureSubscription(ctx context.Context, table, topicName str
 	}
 	p.logger.Info("created BigQuery subscription", "subscription", id)
 	return nil
+}
+
+// provisionLock returns the per-table provisioning mutex.
+func (p *Publisher) provisionLock(table string) *sync.Mutex {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.provLocks == nil {
+		p.provLocks = map[string]*sync.Mutex{}
+	}
+	mu := p.provLocks[table]
+	if mu == nil {
+		mu = &sync.Mutex{}
+		p.provLocks[table] = mu
+	}
+	return mu
 }
 
 // eventsSchema resolves the schema of the events table for a table:
