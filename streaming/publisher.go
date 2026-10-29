@@ -37,6 +37,7 @@ type Publisher struct {
 	envPrefix string
 
 	mu          sync.RWMutex
+	provisionMu sync.Mutex // serializes infrastructure provisioning
 	topics      map[string]*pubsub.Topic
 	schemas     map[string]bigquery.Schema
 	provisioned map[string]bool
@@ -213,6 +214,22 @@ func (p *Publisher) ensureInfra(ctx context.Context, table string) (*pubsub.Topi
 		return topic, nil
 	}
 
+	if provisioned && ok {
+		return topic, nil
+	}
+
+	// Provisioning involves several remote calls and must not be run twice
+	// concurrently for the same table (concurrent events would race and one
+	// of them would drop its message on a duplicate-resource error).
+	p.provisionMu.Lock()
+	defer p.provisionMu.Unlock()
+
+	// Re-check now that we hold the lock: another goroutine may have
+	// provisioned the infrastructure while we waited.
+	p.mu.RLock()
+	topic, ok = p.topics[name]
+	provisioned = p.provisioned[table]
+	p.mu.RUnlock()
 	if provisioned && ok {
 		return topic, nil
 	}
@@ -527,8 +544,13 @@ func isNotFound(err error) bool {
 
 // isAlreadyExists reports whether the error means the resource already
 // exists (a benign race when several events provision the same table).
+// Pub/Sub returns a gRPC status; BigQuery returns a googleapi error.
 func isAlreadyExists(err error) bool {
-	return status.Code(err) == codes.AlreadyExists
+	if status.Code(err) == codes.AlreadyExists {
+		return true
+	}
+	var gerr *googleapi.Error
+	return errors.As(err, &gerr) && gerr.Code == 409
 }
 
 // Close stops the publisher and releases resources.

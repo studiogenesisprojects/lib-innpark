@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"cloud.google.com/go/bigquery"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -81,5 +82,15 @@ func TestStringifyComplexFields(t *testing.T) {
 	}
 	if data["name"] != "plain" {
 		t.Error("plain strings must be untouched")
+	}
+}
+
+func TestIsAlreadyExistsBigQuery409(t *testing.T) {
+	err := &googleapi.Error{Code: 409, Message: "Already Exists: Table x"}
+	if !isAlreadyExists(err) {
+		t.Error("expected googleapi 409 (BigQuery duplicate table) to be detected")
+	}
+	if isAlreadyExists(&googleapi.Error{Code: 403, Message: "forbidden"}) {
+		t.Error("expected googleapi 403 not to be treated as AlreadyExists")
 	}
 }
