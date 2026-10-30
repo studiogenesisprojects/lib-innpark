@@ -293,8 +293,11 @@ func (p *Publisher) ensureEventsTable(ctx context.Context, table string) error {
 	}
 
 	t := p.bq.Dataset(p.cfg.dataset).Table(p.eventsTable(table))
-	if _, err := t.Metadata(ctx); err == nil {
-		return nil
+	if md, err := t.Metadata(ctx); err == nil {
+		// The table already exists: add any column the PocketBase schema has
+		// gained since it was created. Publishing such a field into a table
+		// without it is a permanent error that drops the message.
+		return p.addMissingColumns(ctx, t, md, schema, table)
 	} else if !isNotFound(err) {
 		return fmt.Errorf("failed to check events table %s: %w", p.eventsTable(table), err)
 	}
@@ -320,6 +323,35 @@ func (p *Publisher) ensureEventsTable(ctx context.Context, table string) error {
 		p.logger.Info("created BigQuery events table",
 			"dataset", p.cfg.dataset, "table", p.eventsTable(table))
 	}
+	return nil
+}
+
+// addMissingColumns adds to an existing events table the schema fields it does
+// not have yet. Additive only: never renames, retypes or drops columns.
+func (p *Publisher) addMissingColumns(ctx context.Context, t *bigquery.Table, md *bigquery.TableMetadata, want bigquery.Schema, table string) error {
+	var missing bigquery.Schema
+	for _, f := range want {
+		if !schemaHas(md.Schema, f.Name) {
+			missing = append(missing, f)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+
+	merged := make(bigquery.Schema, 0, len(md.Schema)+len(missing))
+	merged = append(merged, md.Schema...)
+	merged = append(merged, missing...)
+
+	if _, err := t.Update(ctx, bigquery.TableMetadataToUpdate{Schema: merged}, md.ETag); err != nil {
+		return fmt.Errorf("failed to add %d column(s) to %s: %w", len(missing), p.eventsTable(table), err)
+	}
+	names := make([]string, 0, len(missing))
+	for _, f := range missing {
+		names = append(names, f.Name)
+	}
+	p.logger.Info("added missing columns to BigQuery events table",
+		"table", p.eventsTable(table), "columns", names)
 	return nil
 }
 
@@ -440,25 +472,26 @@ func (p *Publisher) eventsSchema(ctx context.Context, table string) (bigquery.Sc
 	ds := p.bq.Dataset(p.cfg.dataset)
 
 	// PocketBase file fields are excluded by default: they only hold file
-	// names pointing to binaries.
-	exclusions := p.cfg.opts.ExcludeColumns
+	// names pointing to binaries. Copy the slice: appending to the shared
+	// options slice from several goroutines would corrupt it.
+	exclusions := make([]string, 0, len(p.cfg.opts.ExcludeColumns)+4)
+	exclusions = append(exclusions, p.cfg.opts.ExcludeColumns...)
 	if !p.cfg.opts.KeepFileFields {
 		exclusions = append(exclusions, p.fileFields(table)...)
 	}
 
+	var base bigquery.Schema
+	fromBigQuery := false
+
 	if md, err := ds.Table(p.eventsTable(table)).Metadata(ctx); err == nil && md.Type == bigquery.RegularTable {
-		s := pruneExcludedColumns(table, md.Schema, exclusions)
-		p.cacheSchema(table, s)
-		return s, nil
+		base = pruneExcludedColumns(table, md.Schema, exclusions)
+		fromBigQuery = true
 	} else if err != nil && !isNotFound(err) {
 		return nil, err
-	}
-
-	if p.eventsTable(table) != table {
+	} else if p.eventsTable(table) != table {
 		if md, err := ds.Table(table).Metadata(ctx); err == nil && md.Type == bigquery.RegularTable {
-			s := withEventFields(pruneExcludedColumns(table, md.Schema, exclusions))
-			p.cacheSchema(table, s)
-			return s, nil
+			base = withEventFields(pruneExcludedColumns(table, md.Schema, exclusions))
+			fromBigQuery = true
 		} else if err != nil && !isNotFound(err) {
 			return nil, err
 		}
@@ -470,13 +503,44 @@ func (p *Publisher) eventsSchema(ctx context.Context, table string) (bigquery.Sc
 	if err := q.All(&cols); err != nil {
 		return nil, fmt.Errorf("failed to read SQLite columns of %s: %w", table, err)
 	}
+
 	if len(cols) == 0 {
 		return nil, fmt.Errorf("table %s not found in BigQuery nor in SQLite", table)
 	}
 
-	s = schemaFromSQLiteColumns(table, cols, exclusions)
+	if !fromBigQuery {
+		s = schemaFromSQLiteColumns(table, cols, exclusions)
+		p.cacheSchema(table, s)
+		return s, nil
+	}
+
+	// A BigQuery table may lag behind the PocketBase schema (a new column
+	// added by a migration, like stays.tariff_kind). Fields missing from the
+	// schema are silently dropped from every event, so merge them in.
+	s = mergeSQLiteColumns(table, base, cols, exclusions)
 	p.cacheSchema(table, s)
 	return s, nil
+}
+
+// mergeSQLiteColumns appends to base the SQLite columns that BigQuery does not
+// know about yet (new columns added by a migration). Excluded and internal
+// columns are skipped, and event envelope fields are never duplicated.
+func mergeSQLiteColumns(table string, base bigquery.Schema, cols []sqliteColumn, exclusions []string) bigquery.Schema {
+	merged := make(bigquery.Schema, 0, len(base)+len(cols))
+	merged = append(merged, base...)
+	for _, c := range cols {
+		if schemaHas(merged, c.Name) || isEventField(c.Name) {
+			continue
+		}
+		if isExcludedColumn(table, c.Name, exclusions) {
+			continue
+		}
+		merged = append(merged, &bigquery.FieldSchema{
+			Name: c.Name,
+			Type: declaredTypeToBQ(c.Name, c.Type),
+		})
+	}
+	return merged
 }
 
 // fileFields returns "table.column" entries for the PocketBase file fields of

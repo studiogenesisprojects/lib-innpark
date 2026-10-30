@@ -152,3 +152,40 @@ func TestSanitizeByType(t *testing.T) {
 		t.Error("empty string for STRING must be kept")
 	}
 }
+
+func TestMergeSQLiteColumns(t *testing.T) {
+	base := bigquery.Schema{
+		{Name: "id", Type: bigquery.StringFieldType},
+		{Name: "created", Type: bigquery.TimestampFieldType},
+		{Name: fieldOperation, Type: bigquery.StringFieldType},
+		{Name: fieldEventTimestamp, Type: bigquery.TimestampFieldType},
+	}
+	cols := []sqliteColumn{
+		{Name: "id", Type: "TEXT"},          // already present
+		{Name: "tariff_kind", Type: "TEXT"}, // new column from a migration
+		{Name: "amount", Type: "NUMERIC"},
+		{Name: "secret", Type: "TEXT"},            // excluded
+		{Name: fieldEventTimestamp, Type: "TEXT"}, // envelope, never duplicated
+	}
+
+	merged := mergeSQLiteColumns("stays", base, cols, []string{"stays.secret"})
+
+	if !schemaHas(merged, "tariff_kind") {
+		t.Error("expected the new SQLite column to be merged in")
+	}
+	if !schemaHas(merged, "amount") {
+		t.Error("expected numeric column to be merged in")
+	}
+	if schemaHas(merged, "secret") {
+		t.Error("expected excluded column to be skipped")
+	}
+	n := 0
+	for _, f := range merged {
+		if f.Name == fieldEventTimestamp {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("event_timestamp must appear exactly once, got %d", n)
+	}
+}
