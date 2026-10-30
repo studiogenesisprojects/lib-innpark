@@ -293,11 +293,8 @@ func (p *Publisher) ensureEventsTable(ctx context.Context, table string) error {
 	}
 
 	t := p.bq.Dataset(p.cfg.dataset).Table(p.eventsTable(table))
-	if md, err := t.Metadata(ctx); err == nil {
-		// The table already exists: add any column the PocketBase schema has
-		// gained since it was created. Publishing such a field into a table
-		// without it is a permanent error that drops the message.
-		return p.addMissingColumns(ctx, t, md, schema, table)
+	if _, err := t.Metadata(ctx); err == nil {
+		return nil
 	} else if !isNotFound(err) {
 		return fmt.Errorf("failed to check events table %s: %w", p.eventsTable(table), err)
 	}
@@ -326,33 +323,25 @@ func (p *Publisher) ensureEventsTable(ctx context.Context, table string) error {
 	return nil
 }
 
-// addMissingColumns adds to an existing events table the schema fields it does
-// not have yet. Additive only: never renames, retypes or drops columns.
-func (p *Publisher) addMissingColumns(ctx context.Context, t *bigquery.Table, md *bigquery.TableMetadata, want bigquery.Schema, table string) error {
-	var missing bigquery.Schema
-	for _, f := range want {
-		if !schemaHas(md.Schema, f.Name) {
-			missing = append(missing, f)
+// warnDroppedColumns logs the PocketBase columns that the events table does
+// not have, so a silent data loss is at least visible in the logs.
+func (p *Publisher) warnDroppedColumns(table string, schema bigquery.Schema, exclusions []string) {
+	cols, err := p.sqliteColumns(table)
+	if err != nil {
+		return
+	}
+	var dropped []string
+	for _, c := range cols {
+		if isEventField(c.Name) || schemaHas(schema, c.Name) || isExcludedColumn(table, c.Name, exclusions) {
+			continue
 		}
+		dropped = append(dropped, c.Name)
 	}
-	if len(missing) == 0 {
-		return nil
+	if len(dropped) > 0 {
+		p.logger.Warn("columns are not streamed: the events table lacks them "+
+			"(add them to the table before relying on them)",
+			"table", table, "columns", dropped)
 	}
-
-	merged := make(bigquery.Schema, 0, len(md.Schema)+len(missing))
-	merged = append(merged, md.Schema...)
-	merged = append(merged, missing...)
-
-	if _, err := t.Update(ctx, bigquery.TableMetadataToUpdate{Schema: merged}, md.ETag); err != nil {
-		return fmt.Errorf("failed to add %d column(s) to %s: %w", len(missing), p.eventsTable(table), err)
-	}
-	names := make([]string, 0, len(missing))
-	for _, f := range missing {
-		names = append(names, f.Name)
-	}
-	p.logger.Info("added missing columns to BigQuery events table",
-		"table", p.eventsTable(table), "columns", names)
-	return nil
 }
 
 // ensureSubscription creates the native Pub/Sub -> BigQuery subscription.
@@ -484,8 +473,14 @@ func (p *Publisher) eventsSchema(ctx context.Context, table string) (bigquery.Sc
 	fromBigQuery := false
 
 	if md, err := ds.Table(p.eventsTable(table)).Metadata(ctx); err == nil && md.Type == bigquery.RegularTable {
-		base = pruneExcludedColumns(table, md.Schema, exclusions)
-		fromBigQuery = true
+		// The events table is the contract for this pipeline. Altering it makes
+		// the Pub/Sub BigQuery subscription reject every message (it caches the
+		// table schema), so it is never modified here: columns the table does
+		// not have are dropped and reported.
+		s = pruneExcludedColumns(table, md.Schema, exclusions)
+		p.warnDroppedColumns(table, s, exclusions)
+		p.cacheSchema(table, s)
+		return s, nil
 	} else if err != nil && !isNotFound(err) {
 		return nil, err
 	} else if p.eventsTable(table) != table {
@@ -497,11 +492,9 @@ func (p *Publisher) eventsSchema(ctx context.Context, table string) (bigquery.Sc
 		}
 	}
 
-	var cols []sqliteColumn
-	q := p.app.Dao().DB().NewQuery(`SELECT name, type FROM pragma_table_info({:t})`).
-		Bind(dbx.Params{"t": table})
-	if err := q.All(&cols); err != nil {
-		return nil, fmt.Errorf("failed to read SQLite columns of %s: %w", table, err)
+	cols, err := p.sqliteColumns(table)
+	if err != nil {
+		return nil, err
 	}
 
 	if len(cols) == 0 {
@@ -520,6 +513,17 @@ func (p *Publisher) eventsSchema(ctx context.Context, table string) (bigquery.Sc
 	s = mergeSQLiteColumns(table, base, cols, exclusions)
 	p.cacheSchema(table, s)
 	return s, nil
+}
+
+// sqliteColumns returns the columns of a PocketBase table.
+func (p *Publisher) sqliteColumns(table string) ([]sqliteColumn, error) {
+	var cols []sqliteColumn
+	q := p.app.Dao().DB().NewQuery(`SELECT name, type FROM pragma_table_info({:t})`).
+		Bind(dbx.Params{"t": table})
+	if err := q.All(&cols); err != nil {
+		return nil, fmt.Errorf("failed to read SQLite columns of %s: %w", table, err)
+	}
+	return cols, nil
 }
 
 // mergeSQLiteColumns appends to base the SQLite columns that BigQuery does not
