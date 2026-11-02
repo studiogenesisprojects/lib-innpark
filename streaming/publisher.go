@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"strconv"
 	"strings"
 	"sync"
@@ -141,6 +142,13 @@ func (p *Publisher) topicName(table string) string {
 // The payload carries the same row content the old CSV exporter sent, plus
 // the operation and the event timestamp.
 func (p *Publisher) PublishModelChange(ctx context.Context, table, operation string, data map[string]interface{}) error {
+	return p.PublishModelChangeAt(ctx, table, operation, data, time.Now().UTC())
+}
+
+// PublishModelChangeAt is PublishModelChange with an explicit event time, which
+// must be taken when the change happens (not when it is published) so that
+// changes of the same row keep their order.
+func (p *Publisher) PublishModelChangeAt(ctx context.Context, table, operation string, data map[string]interface{}, eventTime time.Time) error {
 	if !p.ShouldStream(table) {
 		return nil
 	}
@@ -157,7 +165,7 @@ func (p *Publisher) PublishModelChange(ctx context.Context, table, operation str
 	convertJSONFields(schema, filtered)
 	if schemaHas(schema, fieldOperation) {
 		filtered[fieldOperation] = operation
-		filtered[fieldEventTimestamp] = time.Now().UTC().Format(time.RFC3339Nano)
+		filtered[fieldEventTimestamp] = eventTime.UTC().Format(time.RFC3339Nano)
 	}
 
 	payload, err := json.Marshal(filtered)
@@ -607,7 +615,7 @@ func coerceTypes(schema bigquery.Schema, data map[string]interface{}) {
 				data[f.Name] = 0
 			}
 		case float64:
-			data[f.Name] = int64(v)
+			data[f.Name] = int64(math.Round(v))
 		}
 	}
 }
@@ -658,7 +666,7 @@ func sanitizeByType(schema bigquery.Schema, data map[string]interface{}) {
 			if n, err := strconv.ParseInt(s, 10, 64); err == nil {
 				data[f.Name] = n
 			} else if fl, err := strconv.ParseFloat(s, 64); err == nil {
-				data[f.Name] = int64(fl)
+				data[f.Name] = int64(math.Round(fl))
 			} else {
 				delete(data, f.Name)
 			}
