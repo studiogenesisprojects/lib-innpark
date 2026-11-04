@@ -652,7 +652,12 @@ func sanitizeByType(schema bigquery.Schema, data map[string]interface{}) {
 
 		switch f.Type {
 		case bigquery.TimestampFieldType:
-			if isString && (s == "" || !parsableTimestamp(s)) {
+			if !isString {
+				continue
+			}
+			if ts, ok := normalizeTimestamp(s); ok {
+				data[f.Name] = ts
+			} else {
 				delete(data, f.Name)
 			}
 		case bigquery.IntegerFieldType:
@@ -699,10 +704,13 @@ func sanitizeByType(schema bigquery.Schema, data map[string]interface{}) {
 	}
 }
 
-// normalizeTimestamps removes empty or unparseable timestamp values.
+// normalizeTimestamps removes empty or unparseable timestamp values and
+// rewrites zoneless ones as UTC in the PocketBase format.
 // PocketBase marshals zero types.DateTime values as "", which BigQuery
 // rejects for TIMESTAMP columns with a permanent insert error, dropping
-// the whole message.
+// the whole message. Text columns written by hand (e.g. list_items.deleted_at
+// = "2006-01-02 15:04:05") carry no zone; SQLite and the snapshot read them as
+// UTC, so they are kept instead of reaching BigQuery as NULL.
 func normalizeTimestamps(schema bigquery.Schema, data map[string]interface{}) {
 	for _, f := range schema {
 		if f.Type != bigquery.TimestampFieldType {
@@ -712,7 +720,9 @@ func normalizeTimestamps(schema bigquery.Schema, data map[string]interface{}) {
 		if !ok {
 			continue
 		}
-		if s == "" || !parsableTimestamp(s) {
+		if v, ok := normalizeTimestamp(s); ok {
+			data[f.Name] = v
+		} else {
 			delete(data, f.Name)
 		}
 	}
@@ -723,13 +733,32 @@ var timestampLayouts = []string{
 	"2006-01-02 15:04:05.999999999Z07:00", // PocketBase types.DateTime
 }
 
-func parsableTimestamp(s string) bool {
+// Zoneless layouts, read as UTC.
+var utcTimestampLayouts = []string{
+	"2006-01-02 15:04:05.999999999",
+	"2006-01-02T15:04:05.999999999",
+	"2006-01-02",
+}
+
+const pocketBaseLayout = "2006-01-02 15:04:05.000Z"
+
+// normalizeTimestamp returns the value to send for a TIMESTAMP column:
+// zoned values unchanged, zoneless ones as UTC in the PocketBase format.
+func normalizeTimestamp(s string) (string, bool) {
+	if s == "" {
+		return "", false
+	}
 	for _, layout := range timestampLayouts {
 		if _, err := time.Parse(layout, s); err == nil {
-			return true
+			return s, true
 		}
 	}
-	return false
+	for _, layout := range utcTimestampLayouts {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t.UTC().Format(pocketBaseLayout), true
+		}
+	}
+	return "", false
 }
 
 // convertJSONFields stringifies values of JSON-type columns so BigQuery

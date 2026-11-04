@@ -145,3 +145,50 @@ func modelData(m interface{}) (map[string]interface{}, error) {
 	}
 	return data, nil
 }
+
+// PublishStoredRows publishes an event with the stored row of every id, for
+// changes made with raw SQL, which bypasses the model hooks. Call it once the
+// change is committed: the rows are read right away (so the event carries
+// that state) and published in the background. It never fails the caller:
+// errors are only logged, and the nightly reconciliation fixes missed events.
+func PublishStoredRows(db dbx.Builder, table, operation string, ids ...string) {
+	defer func() {
+		if r := recover(); r != nil {
+			streamLog.Warn("PublishStoredRows panic recovered", "table", table, "panic", r)
+		}
+	}()
+
+	p := GetPublisher()
+	if p == nil || len(ids) == 0 || !p.ShouldStream(table) {
+		return
+	}
+	eventTime := time.Now().UTC()
+
+	rows := make([]map[string]interface{}, 0, len(ids))
+	for _, id := range ids {
+		row, err := storedRow(db, table, id)
+		if err != nil {
+			streamLog.Warn("failed to read stored row for streaming", "table", table, "id", id, "error", err)
+			continue
+		}
+		if row != nil {
+			rows = append(rows, row)
+		}
+	}
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				streamLog.Warn("PublishStoredRows goroutine panic recovered", "table", table, "panic", r)
+			}
+		}()
+		for _, row := range rows {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			err := p.PublishModelChangeAt(ctx, table, operation, row, eventTime)
+			cancel()
+			if err != nil {
+				streamLog.Warn("failed to stream stored row", "table", table, "id", row["id"], "operation", operation, "error", err)
+			}
+		}
+	}()
+}

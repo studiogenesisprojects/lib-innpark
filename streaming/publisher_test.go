@@ -55,6 +55,35 @@ func TestNormalizeTimestamps(t *testing.T) {
 	}
 }
 
+func TestNormalizeTimestampsKeepsZonelessValuesAsUTC(t *testing.T) {
+	schema := bigquery.Schema{
+		{Name: "deleted_at", Type: bigquery.TimestampFieldType},
+		{Name: "t_sep", Type: bigquery.TimestampFieldType},
+		{Name: "day", Type: bigquery.TimestampFieldType},
+		{Name: "rfc", Type: bigquery.TimestampFieldType},
+	}
+	data := map[string]interface{}{
+		"deleted_at": "2026-11-04 02:06:42", // list_items expiry format
+		"t_sep":      "2026-11-04T02:06:42.5",
+		"day":        "2026-11-04",
+		"rfc":        "2026-11-04T02:06:42+01:00",
+	}
+
+	sanitizeByType(schema, data) // the publish path
+
+	want := map[string]interface{}{
+		"deleted_at": "2026-11-04 02:06:42.000Z",
+		"t_sep":      "2026-11-04 02:06:42.500Z",
+		"day":        "2026-11-04 00:00:00.000Z",
+		"rfc":        "2026-11-04T02:06:42+01:00",
+	}
+	for k, v := range want {
+		if data[k] != v {
+			t.Errorf("%s = %#v, want %#v", k, data[k], v)
+		}
+	}
+}
+
 func TestStringifyComplexFields(t *testing.T) {
 	schema := bigquery.Schema{
 		{Name: "settings", Type: bigquery.StringFieldType}, // Prod BQ: STRING
