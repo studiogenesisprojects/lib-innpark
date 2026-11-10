@@ -11,6 +11,7 @@ import (
 
 	"github.com/labstack/echo/v5"
 	"github.com/pocketbase/pocketbase/apis"
+	"github.com/pocketbase/pocketbase/daos"
 	"github.com/pocketbase/pocketbase/models"
 )
 
@@ -78,7 +79,23 @@ func Auth(app core.App, target string) echo.HandlerFunc {
 			user.Set("tokenKey", userInFirebase.UID)
 			user.Set("password", userInFirebase.UID)
 			user.Set("emailVisibility", true)
-			if err := app.Dao().SaveRecord(user); err != nil {
+			exists := func(uid string) (bool, error) {
+				_, err := getFirebaseUser(uid, tenantToUse)
+				if err != nil {
+					if auth.IsUserNotFound(err) {
+						return false, nil
+					}
+					return true, err
+				}
+				return true, nil
+			}
+			err = app.Dao().RunInTransaction(func(txDao *daos.Dao) error {
+				if err := releaseOrphanEmail(txDao, collection.Name, userProviderInfo.Email, userInFirebase.UID, exists); err != nil {
+					return err
+				}
+				return txDao.SaveRecord(user)
+			})
+			if err != nil {
 				return apis.NewApiError(500, "failed to create user", err)
 			}
 		}
