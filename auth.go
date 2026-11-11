@@ -89,12 +89,18 @@ func Auth(app core.App, target string) echo.HandlerFunc {
 				}
 				return true, nil
 			}
-			err = app.Dao().RunInTransaction(func(txDao *daos.Dao) error {
-				if err := releaseOrphanEmail(txDao, collection.Name, userProviderInfo.Email, userInFirebase.UID, exists); err != nil {
-					return err
-				}
-				return txDao.SaveRecord(user)
-			})
+			// Firebase is checked before the transaction, which then starts with
+			// a write: no network call holds the write connection and no read
+			// is upgraded to a write (SQLITE_BUSY on PocketBase 0.22).
+			orphans, err := orphanEmailHolders(app.Dao(), collection.Name, userProviderInfo.Email, userInFirebase.UID, exists)
+			if err == nil {
+				err = app.Dao().RunInTransaction(func(txDao *daos.Dao) error {
+					if err := releaseOrphanEmails(txDao, collection.Name, orphans); err != nil {
+						return err
+					}
+					return txDao.SaveRecord(user)
+				})
+			}
 			if err != nil {
 				return apis.NewApiError(500, "failed to create user", err)
 			}
